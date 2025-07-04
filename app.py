@@ -118,12 +118,8 @@ def get_feed_entries(feed_url, num_entries=5):
         plain += f"{title}\n{summary}\n\n"
     return html or "No entries found.", plain
 
-def ollama_chat(question, context, model="llama3", nlu=None, mmlu=None):
+def ollama_chat(question, context, model="llama3"):
     system_prompt = "You are a helpful assistant answering questions about RSS feed news articles. Use only the provided feed content as your source."
-    if nlu:
-        system_prompt += f" Answer with an NLU (Natural Language Understanding) focus on: {nlu}."
-    if mmlu:
-        system_prompt += f" Include MMLU (Massive Multitask Language Understanding) reasoning for: {mmlu}."
     payload = {
         "model": model,
         "messages": [
@@ -245,8 +241,6 @@ with gr.Blocks() as demo:
     audio_input = gr.Audio(label="Or ask by voice")
     tts_button = gr.Button("🔊 Speak Answer (TTS)")
     tts_audio = gr.Audio(label="Ollama TTS Answer", autoplay=True)
-    nlu = gr.Textbox(label="NLU focus (optional)", placeholder="e.g. sentiment, summarization")
-    mmlu = gr.Textbox(label="MMLU focus (optional)", placeholder="e.g. reasoning, domain")
     context_state = gr.State("")
     chat_history = gr.State([])
 
@@ -277,7 +271,7 @@ with gr.Blocks() as demo:
         outputs=[headlines, context_state, chat_history]
     )
 
-    def handle_chat(user_message, nlu, mmlu, context, history, ollama_model_):
+    def handle_chat(user_message, context, history, ollama_model_):
         if not user_message.strip():
             return history, None
         if not context.strip():
@@ -285,7 +279,7 @@ with gr.Blocks() as demo:
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": "No feed context available."}
             ], None
-        answer = ollama_chat(user_message, context, model=ollama_model_, nlu=nlu, mmlu=mmlu)
+        answer = ollama_chat(user_message, context, model=ollama_model_)
         history = (history or []) + [
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": answer}
@@ -297,11 +291,11 @@ with gr.Blocks() as demo:
 
     user_input.submit(
         fn=handle_chat,
-        inputs=[user_input, nlu, mmlu, context_state, chat_history, ollama_model],
+        inputs=[user_input, context_state, chat_history, ollama_model],
         outputs=[chatbox, tts_audio]
     )
 
-    def handle_audio(audio, nlu, mmlu, context, history, ollama_model_):
+    def handle_audio(audio, context, history, ollama_model_):
         if not WHISPER_AVAILABLE:
             return history + [
                 {"role": "user", "content": "[Voice]"},
@@ -313,7 +307,7 @@ with gr.Blocks() as demo:
                 {"role": "user", "content": "[Voice]"},
                 {"role": "assistant", "content": f"Whisper error: {err}"}
             ], None
-        answer = ollama_chat(transcript, context, model=ollama_model_, nlu=nlu, mmlu=mmlu)
+        answer = ollama_chat(transcript, context, model=ollama_model_)
         history = (history or []) + [
             {"role": "user", "content": transcript},
             {"role": "assistant", "content": answer}
@@ -324,7 +318,7 @@ with gr.Blocks() as demo:
 
     audio_input.change(
         fn=handle_audio,
-        inputs=[audio_input, nlu, mmlu, context_state, chat_history, ollama_model],
+        inputs=[audio_input, context_state, chat_history, ollama_model],
         outputs=[chatbox, tts_audio]
     )
 
