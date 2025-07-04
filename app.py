@@ -1,11 +1,34 @@
 import gradio as gr
 import feedparser
 import requests
+import os
 
-OLLAMA_URL = "http://localhost:11434/api/chat"  # Change if your Ollama endpoint is different
-OLLAMA_MODEL = "llama3"  # Or another model you have
+OLLAMA_URL = "http://localhost:11434/api/chat"
 
-# ... (FEEDS dict here, unchanged) ...
+def get_ollama_models():
+    try:
+        r = requests.get("http://localhost:11434/api/tags", timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        models = [m['name'] for m in data.get('models', [])]
+        # Provide a fallback if no models are found
+        if not models:
+            models = ["llama3"]
+        return models
+    except Exception:
+        return ["llama3"]
+
+# --- RSS FEEDS ---
+FEEDS = {
+    # ... (unchanged, same as previous versions) ...
+    "AI & Technology": [ # ... ],
+    "Finance & Fintech": [ # ... ],
+    "Physics & Science": [ # ... ],
+    "Technology": [ # ... ],
+    "General News": [ # ... ],
+    "Datanacci & Data Science": [ # ... ],
+    "Blockchain & Crypto": [ # ... ]
+}
 
 def get_feed_entries(feed_url, num_entries=5):
     feed = feedparser.parse(feed_url)
@@ -32,11 +55,16 @@ def show_feed(category, feed_name):
         return get_feed_entries(url)[0]
     return "Feed not found."
 
-def ollama_chat(question, context):
+def ollama_chat(question, context, model="llama3", nlu=None, mmlu=None):
+    system_prompt = "You are a helpful assistant answering questions about RSS feed news articles. Use only the provided feed content as your source."
+    if nlu:
+        system_prompt += f" Answer with an NLU (Natural Language Understanding) focus on: {nlu}."
+    if mmlu:
+        system_prompt += f" Include MMLU (Massive Multitask Language Understanding) reasoning for: {mmlu}."
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": model,
         "messages": [
-            {"role": "system", "content": "You are a helpful assistant answering questions about RSS feed news articles. Use only the provided feed content as your source."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"}
         ]
     }
@@ -44,8 +72,6 @@ def ollama_chat(question, context):
         r = requests.post(OLLAMA_URL, json=payload, timeout=120)
         r.raise_for_status()
         result = r.json()
-        # Ollama's streaming API may need collecting chunks; if so, adjust here.
-        # For non-streaming, the answer is in result["message"]["content"]
         answer = result.get("message", {}).get("content", "No answer received.")
         return answer
     except Exception as e:
@@ -80,15 +106,49 @@ def get_ticker_html():
         </div>
         """
 
+# --- TTS and Whisper integration ---
+try:
+    import soundfile as sf
+    import numpy as np
+    import torch
+    import torchaudio
+    import tempfile
+    from TTS.api import TTS
+    import whisper
+    TTS_MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
+    tts = TTS(TTS_MODEL)
+    whisper_model = whisper.load_model("base")
+    TTS_AVAILABLE = True
+    WHISPER_AVAILABLE = True
+except Exception as e:
+    TTS_AVAILABLE = False
+    WHISPER_AVAILABLE = False
+
+def tts_speak(text, speaker_wav=None):
+    if not TTS_AVAILABLE:
+        return None, "TTS not available"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmpfile:
+        tts.tts_to_file(text=text, file_path=tmpfile.name, speaker_wav=speaker_wav)
+        audio, sr = sf.read(tmpfile.name)
+        return (sr, audio), None
+
+def whisper_transcribe(audio):
+    if not WHISPER_AVAILABLE:
+        return None, "Whisper not available"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmpfile:
+        sf.write(tmpfile.name, audio[1], audio[0])
+        result = whisper_model.transcribe(tmpfile.name)
+        return result['text'], None
+
 with gr.Blocks() as demo:
     gr.HTML(get_ticker_html())
     gr.Markdown(
         """
         <div style="display: flex; align-items: center; gap: 20px;">
             <img src="https://datanacci.carrd.co/assets/images/image01.png" alt="Datanacci" style="height: 60px;">
-            <h1 style="margin: 0;">AI-RSS Feed Viewer</h1>
+            <h1 style="margin: 0;">AI-RSS Feed Viewer + Chat</h1>
         </div>
-        <p>Select a category and feed to view the latest headlines. Ask questions about the feed using the chat below!</p>
+        <p>Select a category and feed to view the latest headlines. Then ask questions using chat (text or voice!).</p>
         """
     )
     with gr.Row():
@@ -102,11 +162,21 @@ with gr.Blocks() as demo:
             label="Feed",
             value=FEEDS["AI & Technology"][0][0]
         )
+        ollama_model = gr.Dropdown(
+            choices=get_ollama_models(),
+            label="Ollama Model",
+            value=get_ollama_models()[0] if get_ollama_models() else "llama3"
+        )
     headlines = gr.Markdown()
-    chat_input = gr.Textbox(label="Ask a question about this feed", placeholder="Type your question here...")
-    chat_output = gr.Markdown()
-    # Store feed context
+    chatbox = gr.Chatbot(label="Ollama Chat (about the selected feed)")
+    user_input = gr.Textbox(label="Ask a question (text)", placeholder="Type your question here and press Enter...")
+    audio_input = gr.Audio(source="microphone", type="numpy", label="Or ask by voice", optional=True)
+    tts_button = gr.Button("🔊 Speak Answer (TTS)")
+    tts_audio = gr.Audio(label="Ollama TTS Answer", autoplay=True)
+    nlu = gr.Textbox(label="NLU focus (optional)", placeholder="e.g. sentiment, summarization")
+    mmlu = gr.Textbox(label="MMLU focus (optional)", placeholder="e.g. reasoning, domain")
     context_state = gr.State("")
+    chat_history = gr.State([])
 
     def update_feed_and_context(selected_category, selected_feed):
         html, plain = get_feed_entries(FEEDS[selected_category][[n for n, _ in FEEDS[selected_category]].index(selected_feed)][1])
@@ -121,36 +191,66 @@ with gr.Blocks() as demo:
         outputs=feed
     )
 
-    # Update headlines and context when feed or category changes
     def update_on_feed_change(selected_category, selected_feed):
         html, plain = get_feed_entries(FEEDS[selected_category][[n for n, _ in FEEDS[selected_category]].index(selected_feed)][1])
-        return html, plain
+        return html, plain, []
 
     gr.on(
         triggers=[category, feed],
         fn=update_on_feed_change,
         inputs=[category, feed],
-        outputs=[headlines, context_state]
+        outputs=[headlines, context_state, chat_history]
     )
 
-    # Chat button
-    def handle_chat(question, context):
-        if not question.strip():
-            return "Please enter a question."
+    def handle_chat(user_message, nlu, mmlu, context, history, ollama_model_):
+        if not user_message.strip():
+            return history, None
         if not context.strip():
-            return "No feed context available."
-        return ollama_chat(question, context)
+            return history + [[user_message, "No feed context available."]], None
+        answer = ollama_chat(user_message, context, model=ollama_model_, nlu=nlu, mmlu=mmlu)
+        history = (history or []) + [[user_message, answer]]
+        return history, answer
 
-    chat_input.submit(
+    user_input.submit(
         fn=handle_chat,
-        inputs=[chat_input, context_state],
-        outputs=chat_output
+        inputs=[user_input, nlu, mmlu, context_state, chat_history, ollama_model],
+        outputs=[chatbox, tts_audio]
     )
 
-    # Show initial feed
+    def handle_audio(audio, nlu, mmlu, context, history, ollama_model_):
+        if not WHISPER_AVAILABLE:
+            return history + [["[Voice]", "Whisper not available."]], None
+        transcript, err = whisper_transcribe(audio)
+        if err:
+            return history + [["[Voice]", f"Whisper error: {err}"]], None
+        answer = ollama_chat(transcript, context, model=ollama_model_, nlu=nlu, mmlu=mmlu)
+        history = (history or []) + [[transcript, answer]]
+        return history, answer
+
+    audio_input.change(
+        fn=handle_audio,
+        inputs=[audio_input, nlu, mmlu, context_state, chat_history, ollama_model],
+        outputs=[chatbox, tts_audio]
+    )
+
+    def tts_from_last(history):
+        if not TTS_AVAILABLE or not history or not history[-1][1]:
+            return None
+        audio, err = tts_speak(history[-1][1])
+        if err:
+            return None
+        return audio
+
+    tts_button.click(
+        fn=tts_from_last,
+        inputs=chat_history,
+        outputs=tts_audio
+    )
+
     html, plain = get_feed_entries(FEEDS["AI & Technology"][0][1])
     headlines.value = html
     context_state.value = plain
+    chatbox.value = []
 
 if __name__ == "__main__":
     demo.launch()
