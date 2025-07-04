@@ -241,9 +241,9 @@ with gr.Blocks() as demo:
             value=get_ollama_models()[0] if get_ollama_models() else "llama3"
         )
     headlines = gr.Markdown()
-    chatbox = gr.Chatbot(label="Ollama Chat (about the selected feed)")
+    chatbox = gr.Chatbot(label="Ollama Chat (about the selected feed)", type="messages")
     user_input = gr.Textbox(label="Ask a question (text)", placeholder="Type your question here and press Enter...")
-    audio_input = gr.Audio(source="microphone", type="numpy", label="Or ask by voice", optional=True)
+    audio_input = gr.Audio(label="Or ask by voice")
     tts_button = gr.Button("🔊 Speak Answer (TTS)")
     tts_audio = gr.Audio(label="Ollama TTS Answer", autoplay=True)
     nlu = gr.Textbox(label="NLU focus (optional)", placeholder="e.g. sentiment, summarization")
@@ -279,9 +279,15 @@ with gr.Blocks() as demo:
         if not user_message.strip():
             return history, None
         if not context.strip():
-            return history + [[user_message, "No feed context available."]], None
+            return history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": "No feed context available."}
+            ], None
         answer = ollama_chat(user_message, context, model=ollama_model_, nlu=nlu, mmlu=mmlu)
-        history = (history or []) + [[user_message, answer]]
+        history = (history or []) + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": answer}
+        ]
         return history, answer
 
     user_input.submit(
@@ -292,12 +298,21 @@ with gr.Blocks() as demo:
 
     def handle_audio(audio, nlu, mmlu, context, history, ollama_model_):
         if not WHISPER_AVAILABLE:
-            return history + [["[Voice]", "Whisper not available."]], None
+            return history + [
+                {"role": "user", "content": "[Voice]"},
+                {"role": "assistant", "content": "Whisper not available."}
+            ], None
         transcript, err = whisper_transcribe(audio)
         if err:
-            return history + [["[Voice]", f"Whisper error: {err}"]], None
+            return history + [
+                {"role": "user", "content": "[Voice]"},
+                {"role": "assistant", "content": f"Whisper error: {err}"}
+            ], None
         answer = ollama_chat(transcript, context, model=ollama_model_, nlu=nlu, mmlu=mmlu)
-        history = (history or []) + [[transcript, answer]]
+        history = (history or []) + [
+            {"role": "user", "content": transcript},
+            {"role": "assistant", "content": answer}
+        ]
         return history, answer
 
     audio_input.change(
@@ -307,12 +322,15 @@ with gr.Blocks() as demo:
     )
 
     def tts_from_last(history):
-        if not TTS_AVAILABLE or not history or not history[-1][1]:
+        if not TTS_AVAILABLE or not history:
             return None
-        audio, err = tts_speak(history[-1][1])
-        if err:
-            return None
-        return audio
+        for msg in reversed(history):
+            if msg["role"] == "assistant" and msg["content"]:
+                audio, err = tts_speak(msg["content"])
+                if err:
+                    return None
+                return audio
+        return None
 
     tts_button.click(
         fn=tts_from_last,
