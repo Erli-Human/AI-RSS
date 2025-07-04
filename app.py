@@ -251,26 +251,29 @@ with gr.Blocks() as demo:
     context_state = gr.State("")
     chat_history = gr.State([])
 
-    def update_feed_and_context(selected_category, selected_feed):
-        html, plain = get_feed_entries(FEEDS[selected_category][[n for n, _ in FEEDS[selected_category]].index(selected_feed)][1])
-        return html, plain
-
+    # CATEGORY CHANGE: update feeds, headlines, context, chat
+    def category_changed(selected_category):
+        feed_choices = [name for name, url in FEEDS[selected_category]]
+        feed_default = feed_choices[0]
+        html, plain = get_feed_entries(FEEDS[selected_category][0][1])
+        return (
+            gr.Dropdown.update(choices=feed_choices, value=feed_default),
+            html,
+            plain,
+            []
+        )
     category.change(
-        fn=lambda c: gr.Dropdown.update(
-            choices=[name for name, url in FEEDS[c]],
-            value=FEEDS[c][0][0]
-        ),
+        fn=category_changed,
         inputs=category,
-        outputs=feed
+        outputs=[feed, headlines, context_state, chat_history]
     )
 
-    def update_on_feed_change(selected_category, selected_feed):
+    # FEED CHANGE: update headlines, context, clear chat
+    def feed_changed(selected_category, selected_feed):
         html, plain = get_feed_entries(FEEDS[selected_category][[n for n, _ in FEEDS[selected_category]].index(selected_feed)][1])
         return html, plain, []
-
-    gr.on(
-        triggers=[category, feed],
-        fn=update_on_feed_change,
+    feed.change(
+        fn=feed_changed,
         inputs=[category, feed],
         outputs=[headlines, context_state, chat_history]
     )
