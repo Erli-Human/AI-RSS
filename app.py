@@ -1,21 +1,6 @@
 import gradio as gr
 import feedparser
 import requests
-import os
-
-OLLAMA_URL = "http://localhost:11434/api/chat"
-
-def get_ollama_models():
-    try:
-        r = requests.get("http://localhost:11434/api/tags", timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        models = [m['name'] for m in data.get('models', [])]
-        if not models:
-            models = ["llama3"]
-        return models
-    except Exception:
-        return ["llama3"]
 
 FEEDS = {
     "AI & Technology": [
@@ -37,42 +22,6 @@ FEEDS = {
         ("MIT Tech Review", "https://www.technologyreview.com/feed/"),
         ("IEEE Spectrum", "https://spectrum.ieee.org/rss/fulltext"),
     ],
-    "Finance & Fintech": [
-        ("Investing.com", "https://www.investing.com/rss/news.rss"),
-        ("Seeking Alpha", "https://seekingalpha.com/market_currents.xml"),
-        ("Fortune", "https://fortune.com/feed"),
-        ("Forbes Business", "https://www.forbes.com/business/feed/"),
-        ("Economic Times", "https://economictimes.indiatimes.com/rssfeedsdefault.cms"),
-        ("CNBC", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
-        ("Yahoo Finance", "https://finance.yahoo.com/news/rssindex"),
-        ("Financial Samurai", "https://www.financialsamurai.com/feed/"),
-        ("NerdWallet", "https://www.nerdwallet.com/blog/feed/"),
-        ("Money Under 30", "https://www.moneyunder30.com/feed"),
-    ],
-    "Physics & Science": [
-        ("Phys.org", "https://phys.org/rss-feed/"),
-        ("Nature", "https://www.nature.com/nature.rss"),
-        ("APS PRL", "https://feeds.aps.org/rss/recent/prl.xml"),
-        ("Scientific American", "https://rss.sciam.com/ScientificAmerican-Global"),
-        ("New Scientist", "https://www.newscientist.com/feed/home/"),
-        ("Physics World", "https://physicsworld.com/feed/"),
-        ("Symmetry Magazine", "https://www.symmetrymagazine.org/rss/all-articles.xml"),
-        ("Space.com", "https://www.space.com/feeds/all"),
-        ("NASA", "https://www.nasa.gov/rss/dyn/breaking_news.rss"),
-        ("Sky & Telescope", "https://www.skyandtelescope.com/feed/"),
-    ],
-    "Technology": [
-        ("TechCrunch", "https://techcrunch.com/feed/"),
-        ("The Verge", "https://www.theverge.com/rss/index.xml"),
-        ("Ars Technica", "https://arstechnica.com/feed/"),
-        ("Wired", "https://www.wired.com/feed/rss"),
-        ("Gizmodo", "https://gizmodo.com/rss"),
-        ("Engadget", "https://www.engadget.com/rss.xml"),
-        ("Hacker News", "https://news.ycombinator.com/rss"),
-        ("Slashdot", "https://slashdot.org/slashdot.rss"),
-        ("Reddit Technology", "https://www.reddit.com/r/technology/.rss"),
-        ("The Next Web", "https://thenextweb.com/feed/"),
-    ],
     "General News": [
         ("NY Times", "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"),
         ("BBC News", "http://feeds.bbci.co.uk/news/rss.xml"),
@@ -83,58 +32,7 @@ FEEDS = {
         ("Reuters", "https://www.reuters.com/rssFeed/topNews"),
         ("WSJ", "https://www.wsj.com/xml/rss/3_7085.xml"),
     ],
-    "Datanacci & Data Science": [
-        ("Enterprise AI World", "https://www.enterpriseaiworld.com/RSS-Feeds"),
-        ("AI Blog", "https://www.artificial-intelligence.blog/rss-feeds"),
-        ("KDnuggets", "https://feeds.feedburner.com/kdnuggets-data-mining-analytics"),
-        ("Analytics Vidhya", "https://www.analyticsvidhya.com/feed/"),
-        ("Towards Data Science", "https://towardsdatascience.com/feed"),
-        ("Data Science Central", "https://www.datasciencecentral.com/profiles/blog/feed"),
-        ("KDnuggets (Main)", "https://www.kdnuggets.com/feed"),
-        ("Machine Learning Mastery", "https://machinelearningmastery.com/feed/"),
-    ],
-    "Blockchain & Crypto": [
-        ("Cointelegraph", "https://cointelegraph.com/rss"),
-        ("Coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
-        ("Decrypt", "https://decrypt.co/feed"),
-        ("The Block", "https://www.theblockcrypto.com/rss.xml"),
-        ("Bitcoin Magazine", "https://bitcoinmagazine.com/.rss/full/"),
-        ("Crypto News", "https://www.crypto-news.net/feed/"),
-    ]
 }
-
-def get_feed_entries(feed_url, num_entries=5):
-    feed = feedparser.parse(feed_url)
-    if feed.bozo:
-        return f"Failed to parse feed: {feed.bozo_exception}", ""
-    entries = feed.entries[:num_entries]
-    html = ""
-    plain = ""
-    for entry in entries:
-        title = entry.get("title", "No title")
-        link = entry.get("link", "#")
-        summary = entry.get("summary", "")
-        html += f"### [{title}]({link})\n{summary}\n\n"
-        plain += f"{title}\n{summary}\n\n"
-    return html or "No entries found.", plain
-
-def ollama_chat(question, context, model="llama3"):
-    system_prompt = "You are a helpful assistant answering questions about RSS feed news articles. Use only the provided feed content as your source."
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"}
-        ]
-    }
-    try:
-        r = requests.post(OLLAMA_URL, json=payload, timeout=120)
-        r.raise_for_status()
-        result = r.json()
-        answer = result.get("message", {}).get("content", "No answer received.")
-        return answer
-    except Exception as e:
-        return f"Error contacting Ollama: {e}"
 
 def get_ticker_html():
     try:
@@ -175,177 +73,148 @@ def get_ticker_html():
         </div>
         """
 
-try:
-    import soundfile as sf
-    import numpy as np
-    import torch
-    import torchaudio
-    import tempfile
-    from TTS.api import TTS
-    import whisper
-    TTS_MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
-    tts = TTS(TTS_MODEL)
-    whisper_model = whisper.load_model("base")
-    TTS_AVAILABLE = True
-    WHISPER_AVAILABLE = True
-except Exception as e:
-    TTS_AVAILABLE = False
-    WHISPER_AVAILABLE = False
+def get_feed_html(feed_url, num_entries=12):
+    feed = feedparser.parse(feed_url)
+    if feed.bozo:
+        return f"<div class='rss-error'>Failed to parse feed: {feed.bozo_exception}</div>"
+    entries = feed.entries[:num_entries]
+    if not entries:
+        return "<div class='rss-empty'>No entries found.</div>"
+    html = "<div class='rss-grid'>"
+    for entry in entries:
+        title = entry.get("title", "No title")
+        link = entry.get("link", "#")
+        summary = entry.get("summary", "")
+        published = entry.get("published", "")
+        html += f"""
+        <div class='rss-card'>
+            <div class='rss-card-header'>
+                <a href="{link}" target="_blank" class='rss-card-title'>{title}</a>
+            </div>
+            <div class='rss-card-summary'>{summary[:180]}{"..." if len(summary)>180 else ""}</div>
+            <div class='rss-card-footer'>{published}</div>
+        </div>
+        """
+    html += "</div>"
+    return html
 
-def tts_speak(text, speaker_wav=None):
-    if not TTS_AVAILABLE:
-        return None, "TTS not available"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmpfile:
-        tts.tts_to_file(text=text, file_path=tmpfile.name, speaker_wav=speaker_wav)
-        audio, sr = sf.read(tmpfile.name)
-        return (sr, audio), None
-
-def whisper_transcribe(audio):
-    if not WHISPER_AVAILABLE:
-        return None, "Whisper not available"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmpfile:
-        sf.write(tmpfile.name, audio[1], audio[0])
-        result = whisper_model.transcribe(tmpfile.name)
-        return result['text'], None
-
-with gr.Blocks() as demo:
+with gr.Blocks(css="""
+.rss-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 24px 16px;
+    margin-top: 28px;
+    margin-bottom: 12px;
+}
+.rss-card {
+    background: linear-gradient(105deg,#2c2f4a 0%,#232534 100%);
+    border-radius: 17px;
+    box-shadow: 0 2px 16px rgba(23,30,60,0.14);
+    border: 1.5px solid #28305a;
+    padding: 22px 18px 14px 18px;
+    color: #f6faff;
+    display: flex;
+    flex-direction: column;
+    min-height: 180px;
+    transition: transform 0.18s;
+    position: relative;
+}
+.rss-card:hover {
+    transform: translateY(-4px) scale(1.018);
+    box-shadow: 0 8px 32px rgba(0,98,255,0.14);
+    border-color: #0062ff;
+}
+.rss-card-header {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 1.18em;
+    font-weight: 600;
+    margin-bottom: 0.6em;
+    color: #fff;
+}
+.rss-card-title {
+    color: #92b5ff;
+    text-decoration: none;
+    transition: color 0.12s;
+}
+.rss-card-title:hover {
+    color: #fff;
+    text-decoration: underline;
+}
+.rss-card-summary {
+    font-size: 0.99em;
+    color: #cbd3ea;
+    margin-bottom: 1em;
+}
+.rss-card-footer {
+    font-size: 0.93em;
+    color: #5a86c6;
+    margin-top: auto;
+    text-align: right;
+}
+.rss-error, .rss-empty {
+    color: #fff;
+    background: #e74c3c;
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: bold;
+    margin: 18px 0;
+    text-align: center;
+}
+""") as demo:
     gr.HTML(get_ticker_html())
     gr.Markdown(
         """
         <div style="display: flex; align-items: center; gap: 20px;">
             <img src="https://datanacci.carrd.co/assets/images/image01.png" alt="Datanacci" style="height: 60px;">
-            <h1 style="margin: 0;">AI-RSS Feed Viewer + Chat</h1>
+            <h1 style="margin: 0;">AI-RSS Feed Viewer</h1>
         </div>
-        <p>Select a category and feed to view the latest headlines. Then ask questions using chat (text or voice!).</p>
+        <p style="font-size:1.1em;color:#7ec6ff;margin-top:0;">
+            Select a category and feed to view the latest headlines, beautifully presented below.
+        </p>
         """
     )
     with gr.Row():
         category = gr.Dropdown(
             choices=list(FEEDS.keys()),
             label="Category",
-            value="AI & Technology"
+            value=list(FEEDS.keys())[0]
         )
         feed = gr.Dropdown(
-            choices=[name for name, url in FEEDS["AI & Technology"]],
+            choices=[name for name, url in FEEDS[list(FEEDS.keys())[0]]],
             label="Feed",
-            value=FEEDS["AI & Technology"][0][0]
+            value=FEEDS[list(FEEDS.keys())[0]][0][0]
         )
-        ollama_model = gr.Dropdown(
-            choices=get_ollama_models(),
-            label="Ollama Model",
-            value=get_ollama_models()[0] if get_ollama_models() else "llama3"
-        )
-    headlines = gr.Markdown()
-    chatbox = gr.Chatbot(label="Ollama Chat (about the selected feed)", type="messages")
-    user_input = gr.Textbox(label="Ask a question (text)", placeholder="Type your question here and press Enter...")
-    audio_input = gr.Audio(label="Or ask by voice")
-    tts_button = gr.Button("🔊 Speak Answer (TTS)")
-    tts_audio = gr.Audio(label="Ollama TTS Answer", autoplay=True)
-    context_state = gr.State("")
-    chat_history = gr.State([])
 
-    # CATEGORY CHANGE: update feeds, headlines, context, chat
-    def category_changed(selected_category):
-        feed_choices = [name for name, url in FEEDS[selected_category]]
-        feed_default = feed_choices[0]
-        html, plain = get_feed_entries(FEEDS[selected_category][0][1])
-        return (
-            gr.Dropdown.update(choices=feed_choices, value=feed_default),
-            html,
-            plain,
-            []
+    rss_cards = gr.HTML(label="Latest Headlines")
+
+    def update_feeds(selected_category):
+        return gr.Dropdown.update(
+            choices=[name for name, url in FEEDS[selected_category]],
+            value=FEEDS[selected_category][0][0]
         )
+
+    def display_feed(selected_category, selected_feed):
+        url = dict(FEEDS[selected_category])[selected_feed]
+        return get_feed_html(url)
+
     category.change(
-        fn=category_changed,
+        fn=update_feeds,
         inputs=category,
-        outputs=[feed, headlines, context_state, chat_history]
+        outputs=feed
     )
-
-    # FEED CHANGE: update headlines, context, clear chat
-    def feed_changed(selected_category, selected_feed):
-        html, plain = get_feed_entries(FEEDS[selected_category][[n for n, _ in FEEDS[selected_category]].index(selected_feed)][1])
-        return html, plain, []
+    category.change(
+        fn=lambda c: display_feed(c, FEEDS[c][0][0]),
+        inputs=category,
+        outputs=rss_cards,
+    )
     feed.change(
-        fn=feed_changed,
+        fn=display_feed,
         inputs=[category, feed],
-        outputs=[headlines, context_state, chat_history]
+        outputs=rss_cards
     )
 
-    def handle_chat(user_message, context, history, ollama_model_):
-        if not user_message.strip():
-            return history, None
-        if not context.strip():
-            return history + [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": "No feed context available."}
-            ], None
-        answer = ollama_chat(user_message, context, model=ollama_model_)
-        history = (history or []) + [
-            {"role": "user", "content": user_message},
-            {"role": "assistant", "content": answer}
-        ]
-        # Only return TTS/audio if answer is not an error message
-        if isinstance(answer, str) and answer.startswith("Error contacting Ollama"):
-            return history, None
-        return history, answer
-
-    user_input.submit(
-        fn=handle_chat,
-        inputs=[user_input, context_state, chat_history, ollama_model],
-        outputs=[chatbox, tts_audio]
-    )
-
-    def handle_audio(audio, context, history, ollama_model_):
-        if not WHISPER_AVAILABLE:
-            return history + [
-                {"role": "user", "content": "[Voice]"},
-                {"role": "assistant", "content": "Whisper not available."}
-            ], None
-        transcript, err = whisper_transcribe(audio)
-        if err:
-            return history + [
-                {"role": "user", "content": "[Voice]"},
-                {"role": "assistant", "content": f"Whisper error: {err}"}
-            ], None
-        answer = ollama_chat(transcript, context, model=ollama_model_)
-        history = (history or []) + [
-            {"role": "user", "content": transcript},
-            {"role": "assistant", "content": answer}
-        ]
-        if isinstance(answer, str) and answer.startswith("Error contacting Ollama"):
-            return history, None
-        return history, answer
-
-    audio_input.change(
-        fn=handle_audio,
-        inputs=[audio_input, context_state, chat_history, ollama_model],
-        outputs=[chatbox, tts_audio]
-    )
-
-    def tts_from_last(history):
-        if not TTS_AVAILABLE or not history:
-            return None
-        for msg in reversed(history):
-            if msg["role"] == "assistant" and msg["content"]:
-                # Don't try to TTS error messages
-                if msg["content"].startswith("Error contacting Ollama"):
-                    return None
-                audio, err = tts_speak(msg["content"])
-                if err:
-                    return None
-                return audio
-        return None
-
-    tts_button.click(
-        fn=tts_from_last,
-        inputs=chat_history,
-        outputs=tts_audio
-    )
-
-    html, plain = get_feed_entries(FEEDS["AI & Technology"][0][1])
-    headlines.value = html
-    context_state.value = plain
-    chatbox.value = []
+    # Initial load
+    rss_cards.value = get_feed_html(FEEDS[list(FEEDS.keys())[0]][0][1])
 
 if __name__ == "__main__":
     demo.launch()
