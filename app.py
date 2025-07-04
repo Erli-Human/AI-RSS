@@ -11,23 +11,96 @@ def get_ollama_models():
         r.raise_for_status()
         data = r.json()
         models = [m['name'] for m in data.get('models', [])]
-        # Provide a fallback if no models are found
         if not models:
             models = ["llama3"]
         return models
     except Exception:
         return ["llama3"]
 
-# --- RSS FEEDS ---
 FEEDS = {
-    # ... (unchanged, same as previous versions) ...
-    "AI & Technology": [ # ... ],
-    "Finance & Fintech": [ # ... ],
-    "Physics & Science": [ # ... ],
-    "Technology": [ # ... ],
-    "General News": [ # ... ],
-    "Datanacci & Data Science": [ # ... ],
-    "Blockchain & Crypto": [ # ... ]
+    "AI & Technology": [
+        ("ScienceDaily - All", "https://www.sciencedaily.com/rss/all.xml"),
+        ("ScienceDaily - Technology", "https://www.sciencedaily.com/rss/top/technology.xml"),
+        ("O'Reilly Radar", "https://feeds.feedburner.com/oreilly-radar"),
+        ("Google Blog AI", "https://blog.google/products/ai/rss"),
+        ("OpenAI Blog", "https://openai.com/blog/rss.xml"),
+        ("DeepMind Blog", "https://deepmind.com/blog/feed/basic/"),
+        ("Google AI Blog", "https://ai.googleblog.com/feeds/posts/default"),
+        ("Microsoft AI Blog", "https://blogs.microsoft.com/ai/feed/"),
+        ("Machine Learning Mastery", "https://machinelearningmastery.com/feed/"),
+        ("MarkTechPost", "https://www.marktechpost.com/feed/"),
+        ("BAIR Blog", "https://bair.berkeley.edu/blog/feed.xml"),
+        ("Distill", "https://distill.pub/rss.xml"),
+        ("Unite.AI", "https://www.unite.ai/feed/"),
+        ("AI News", "https://www.artificialintelligence-news.com/feed/"),
+        ("VentureBeat AI", "https://venturebeat.com/ai/feed/"),
+        ("MIT Tech Review", "https://www.technologyreview.com/feed/"),
+        ("IEEE Spectrum", "https://spectrum.ieee.org/rss/fulltext"),
+    ],
+    "Finance & Fintech": [
+        ("Investing.com", "https://www.investing.com/rss/news.rss"),
+        ("Seeking Alpha", "https://seekingalpha.com/market_currents.xml"),
+        ("Fortune", "https://fortune.com/feed"),
+        ("Forbes Business", "https://www.forbes.com/business/feed/"),
+        ("Economic Times", "https://economictimes.indiatimes.com/rssfeedsdefault.cms"),
+        ("CNBC", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
+        ("Yahoo Finance", "https://finance.yahoo.com/news/rssindex"),
+        ("Financial Samurai", "https://www.financialsamurai.com/feed/"),
+        ("NerdWallet", "https://www.nerdwallet.com/blog/feed/"),
+        ("Money Under 30", "https://www.moneyunder30.com/feed"),
+    ],
+    "Physics & Science": [
+        ("Phys.org", "https://phys.org/rss-feed/"),
+        ("Nature", "https://www.nature.com/nature.rss"),
+        ("APS PRL", "https://feeds.aps.org/rss/recent/prl.xml"),
+        ("Scientific American", "https://rss.sciam.com/ScientificAmerican-Global"),
+        ("New Scientist", "https://www.newscientist.com/feed/home/"),
+        ("Physics World", "https://physicsworld.com/feed/"),
+        ("Symmetry Magazine", "https://www.symmetrymagazine.org/rss/all-articles.xml"),
+        ("Space.com", "https://www.space.com/feeds/all"),
+        ("NASA", "https://www.nasa.gov/rss/dyn/breaking_news.rss"),
+        ("Sky & Telescope", "https://www.skyandtelescope.com/feed/"),
+    ],
+    "Technology": [
+        ("TechCrunch", "https://techcrunch.com/feed/"),
+        ("The Verge", "https://www.theverge.com/rss/index.xml"),
+        ("Ars Technica", "https://arstechnica.com/feed/"),
+        ("Wired", "https://www.wired.com/feed/rss"),
+        ("Gizmodo", "https://gizmodo.com/rss"),
+        ("Engadget", "https://www.engadget.com/rss.xml"),
+        ("Hacker News", "https://news.ycombinator.com/rss"),
+        ("Slashdot", "https://slashdot.org/slashdot.rss"),
+        ("Reddit Technology", "https://www.reddit.com/r/technology/.rss"),
+        ("The Next Web", "https://thenextweb.com/feed/"),
+    ],
+    "General News": [
+        ("NY Times", "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"),
+        ("BBC News", "http://feeds.bbci.co.uk/news/rss.xml"),
+        ("The Guardian", "https://www.theguardian.com/world/rss"),
+        ("CNN", "http://rss.cnn.com/rss/edition.rss"),
+        ("Washington Post", "https://feeds.washingtonpost.com/rss/world"),
+        ("Google News", "https://news.google.com/rss"),
+        ("Reuters", "https://www.reuters.com/rssFeed/topNews"),
+        ("WSJ", "https://www.wsj.com/xml/rss/3_7085.xml"),
+    ],
+    "Datanacci & Data Science": [
+        ("Enterprise AI World", "https://www.enterpriseaiworld.com/RSS-Feeds"),
+        ("AI Blog", "https://www.artificial-intelligence.blog/rss-feeds"),
+        ("KDnuggets", "https://feeds.feedburner.com/kdnuggets-data-mining-analytics"),
+        ("Analytics Vidhya", "https://www.analyticsvidhya.com/feed/"),
+        ("Towards Data Science", "https://towardsdatascience.com/feed"),
+        ("Data Science Central", "https://www.datasciencecentral.com/profiles/blog/feed"),
+        ("KDnuggets (Main)", "https://www.kdnuggets.com/feed"),
+        ("Machine Learning Mastery", "https://machinelearningmastery.com/feed/"),
+    ],
+    "Blockchain & Crypto": [
+        ("Cointelegraph", "https://cointelegraph.com/rss"),
+        ("Coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
+        ("Decrypt", "https://decrypt.co/feed"),
+        ("The Block", "https://www.theblockcrypto.com/rss.xml"),
+        ("Bitcoin Magazine", "https://bitcoinmagazine.com/.rss/full/"),
+        ("Crypto News", "https://www.crypto-news.net/feed/"),
+    ]
 }
 
 def get_feed_entries(feed_url, num_entries=5):
