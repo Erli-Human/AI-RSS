@@ -1,0 +1,9 @@
+gradio>=4.0
+feedparser
+requests
+soundfile
+numpy
+torch
+torchaudio
+TTS
+openai-whisper
