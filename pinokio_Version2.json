@@ -1,0 +1,12 @@
+{
+  "name": "AI-RSS Gradio App",
+  "description": "A Gradio application for displaying categorized RSS feeds.",
+  "scripts": [
+    {
+      "name": "Install and Launch",
+      "script": "python pinokio.py"
+    }
+  ],
+  "entrypoint": "http://localhost:7860",
+  "icon": "https://raw.githubusercontent.com/gradio-app/gradio/main/.github/logo.png"
+}
