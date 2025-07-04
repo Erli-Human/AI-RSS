@@ -118,16 +118,6 @@ def get_feed_entries(feed_url, num_entries=5):
         plain += f"{title}\n{summary}\n\n"
     return html or "No entries found.", plain
 
-def show_feed(category, feed_name):
-    url = None
-    for name, link in FEEDS.get(category, []):
-        if name == feed_name:
-            url = link
-            break
-    if url:
-        return get_feed_entries(url)[0]
-    return "Feed not found."
-
 def ollama_chat(question, context, model="llama3", nlu=None, mmlu=None):
     system_prompt = "You are a helpful assistant answering questions about RSS feed news articles. Use only the provided feed content as your source."
     if nlu:
@@ -179,7 +169,6 @@ def get_ticker_html():
         </div>
         """
 
-# --- TTS and Whisper integration ---
 try:
     import soundfile as sf
     import numpy as np
