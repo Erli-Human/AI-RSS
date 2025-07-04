@@ -144,7 +144,7 @@ def get_ticker_html():
     try:
         resp = requests.get(
             "https://api.coingecko.com/api/v3/simple/price",
-            params={"ids":"bitcoin,ethereum,dogecoin", "vs_currencies":"usd"}
+            params={"ids": "bitcoin,ethereum,dogecoin", "vs_currencies": "usd"}
         )
         prices = resp.json()
         btc = prices.get("bitcoin", {}).get("usd", "N/A")
@@ -154,17 +154,27 @@ def get_ticker_html():
         sp500 = "5,500"
         aapl = "210.50"
         return f"""
-        <div style="overflow:hidden;background:#111;color:#fff;padding:8px 0;">
-            <marquee style='font-size:1.1em;'>
-                &#128176; BTC: ${btc} &nbsp; | &nbsp; ETH: ${eth} &nbsp; | &nbsp; NASDAQ: {nasdaq} &nbsp; | &nbsp; S&amp;P 500: {sp500} &nbsp; | &nbsp; DOGE: ${doge} &nbsp; | &nbsp; AAPL: ${aapl}
+        <div style="overflow:hidden;background:linear-gradient(90deg,#22243A 0%,#36364e 100%);color:#f5f6fa;padding:8px 0;border-bottom:2px solid #0062ff;">
+            <marquee style='font-size:1.08em;font-family:Segoe UI,Arial,sans-serif;letter-spacing:0.5px;'>
+                <span style="color:#f7b731;">&#128176; BTC: <b>${btc}</b></span> &nbsp; | &nbsp;
+                <span style="color:#45aaf2;">ETH: <b>${eth}</b></span> &nbsp; | &nbsp;
+                <span style="color:#00b894;">NASDAQ: <b>{nasdaq}</b></span> &nbsp; | &nbsp;
+                <span style="color:#636e72;">S&amp;P 500: <b>{sp500}</b></span> &nbsp; | &nbsp;
+                <span style="color:#fd9644;">DOGE: <b>${doge}</b></span> &nbsp; | &nbsp;
+                <span style="color:#4b7bec;">AAPL: <b>${aapl}</b></span>
             </marquee>
         </div>
         """
     except Exception:
         return """
-        <div style="overflow:hidden;background:#111;color:#fff;padding:8px 0;">
-            <marquee style='font-size:1.1em;'>
-                &#128176; BTC: $65,200 &nbsp; | &nbsp; ETH: $3,500 &nbsp; | &nbsp; NASDAQ: 17,800 &nbsp; | &nbsp; S&amp;P 500: 5,500 &nbsp; | &nbsp; DOGE: $0.12 &nbsp; | &nbsp; AAPL: $210.50
+        <div style="overflow:hidden;background:linear-gradient(90deg,#22243A 0%,#36364e 100%);color:#f5f6fa;padding:8px 0;border-bottom:2px solid #0062ff;">
+            <marquee style='font-size:1.08em;font-family:Segoe UI,Arial,sans-serif;letter-spacing:0.5px;'>
+                <span style="color:#f7b731;">&#128176; BTC: <b>$65,200</b></span> &nbsp; | &nbsp;
+                <span style="color:#45aaf2;">ETH: <b>$3,500</b></span> &nbsp; | &nbsp;
+                <span style="color:#00b894;">NASDAQ: <b>17,800</b></span> &nbsp; | &nbsp;
+                <span style="color:#636e72;">S&amp;P 500: <b>5,500</b></span> &nbsp; | &nbsp;
+                <span style="color:#fd9644;">DOGE: <b>$0.12</b></span> &nbsp; | &nbsp;
+                <span style="color:#4b7bec;">AAPL: <b>$210.50</b></span>
             </marquee>
         </div>
         """
@@ -280,6 +290,9 @@ with gr.Blocks() as demo:
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": answer}
         ]
+        # Only return TTS/audio if answer is not an error message
+        if isinstance(answer, str) and answer.startswith("Error contacting Ollama"):
+            return history, None
         return history, answer
 
     user_input.submit(
@@ -305,6 +318,8 @@ with gr.Blocks() as demo:
             {"role": "user", "content": transcript},
             {"role": "assistant", "content": answer}
         ]
+        if isinstance(answer, str) and answer.startswith("Error contacting Ollama"):
+            return history, None
         return history, answer
 
     audio_input.change(
@@ -318,6 +333,9 @@ with gr.Blocks() as demo:
             return None
         for msg in reversed(history):
             if msg["role"] == "assistant" and msg["content"]:
+                # Don't try to TTS error messages
+                if msg["content"].startswith("Error contacting Ollama"):
+                    return None
                 audio, err = tts_speak(msg["content"])
                 if err:
                     return None
