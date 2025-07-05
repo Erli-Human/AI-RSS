@@ -86,7 +86,7 @@ def get_all_feeds_list():
 def get_feed_url_by_name(feed_name):
     """Get RSS URL by feed name"""
     for category, feeds in RSS_FEEDS.items():
-        if f"{category} - {" ".join(category.split())}" == feed_name:  # Normalize the category
+        if f"{category} - {' '.join(category.split())}" == feed_name:  # Normalize the category
             for name, url in feeds.items():
                 return url
     return None
