@@ -32,66 +32,23 @@ RSS_FEEDS = {
         "Forbes Business": "https://www.forbes.com/business/feed/",
         "Economic Times": "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
         "CNBC": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
-        "Yahoo Sports": "https://sports.yahoo.com/rss/",
-        "CBS Sports": "https://www.cbssports.com/rss/headlines",
-        "NFL": "https://www.nfl.com/feeds/rss/news",
-        "NBA": "https://www.nba.com/rss/nba_rss.xml"
+        "Yahoo Finance": "https://finance.yahoo.com/news/rssindex",
+        "Financial Samurai": "https://www.financialsamurai.com/feed/",
+        "NerdWallet": "https://www.nerdwallet.com/blog/feed/",
+        "Money Under 30": "https://www.moneyunder30.com/feed",
+        "Wall Street Journal": "https://www.wsj.com/xml/rss/3_7085.xml",
+        "Bloomberg": "https://feeds.bloomberg.com/markets/news.rss"
     },
     
-    "💻 TECHNOLOGY": {
-        "TechCrunch": "https://techcrunch.com/feed/",
-        "The Verge": "https://www.theverge.com/rss/index.xml",
-        "Ars Technica": "https://arstechnica.com/feed/",
-        "Wired": "https://www.wired.com/feed/rss",
-        "Gizmodo": "https://gizmodo.com/rss",
-        "Engadget": "https://www.engadget.com/rss.xml",
-        "Hacker News": "https://news.ycombinator.com/rss",
-        "Slashdot": "https://slashdot.org/slashdot.rss",
-        "Reddit Technology": "https://www.reddit.com/r/technology/.rss",
-        "The Next Web": "https://thenextweb.com/feed/",
-        "CBS Sports": "https://www.cbssports.com/rss/headlines"
-    },
-    
-    "📰 GENERAL NEWS": {
-        "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
-        "CNN": "http://rss.cnn.com/rss/edition.rss",
-        "New York Times": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
-        "The Guardian": "https://www.theguardian.com/world/rss",
-        "Washington Post": "https://feeds.washingtonpost.com/rss/world",
-        "Google News": "https://news.google.com/rss",
-        "Reuters": "https://www.reuters.com/rssFeed/topNews",
-        "Associated Press": "https://feeds.apnews.com/ApNews/apf-topnews",
-        "NPR": "https://feeds.npr.org/1001/rss.xml",
-        "CBS News": "https://www.cbsnews.com/latest/rss/main"
-    },
-    
-    "🏈 SPORTS": {
-        "ESPN": "https://www.espn.com/espn/rss/news",
-        "Fox Sports": "https://api.foxsports.com/v1/rss?partnerKey=zBaFxRyGKCfxBagJG9b8pqLyndmvo7UU",
-        "CNN Sports": "http://rss.cnn.com/rss/edition_us.rss",
-        "New York Times - Sports": "https://www.nytimes.com/services/xml/rss/nyt/sports.xml",
-        "The Guardian Sport": "https://www.theguardian.com/sport/feed/",
-        "BBC Sport": "http://feeds.bbci.co.uk/sport/rss.xml"
-    },
-    
-    "🎬 ENTERTAINMENT": {
-        "Entertainment Weekly": "https://ew.com/feed/",
-        "Variety": "https://variety.com/feed/",
-        "The Hollywood Reporter": "https://www.hollywoodreporter.com/feed/",
-        "Rolling Stone": "https://www.rollingstone.com/feed/",
-        "Billboard": "https://www.billboard.com/feed/",
-        "IGN": "https://feeds.ign.com/ign/all",
-        "GameSpot": "https://www.gamespot.com/feeds/mashup/",
-        "Polygon": "https://www.polygon.com/rss/index.xml"
-    },
-    
-    "🏥 HEALTH & MEDICINE": {
-        "WebMD": "https://rssfeeds.webmd.com/rss/rss.aspx?RSSSource=RSS_PUBLIC",
-        "Mayo Clinic": "https://newsnetwork.mayoclinic.org/feed/",
-        "Harvard Health": "https://www.health.harvard.edu/blog/feed",
-        "Medical News Today": "https://www.medicalnewstoday.com/rss",
-        "Healthline": "https://www.healthline.com/rss",
-        "CDC": "https://tools.cdc.gov/api/v2/resources/media/132608.rss"
+    "🔬 SCIENCE & PHYSICS": {
+        "Phys.org": "https://phys.org/rss-feed/",
+        "Nature": "https://www.nature.com/nature.rss",
+        "Physical Review Letters": "https://feeds.aps.org/rss/recent/prl.xml",
+        "Scientific American": "https://rss.sciam.com/ScientificAmerican-Global",
+        "New Scientist": "https://www.newscientist.com/feed/home/",
+        "Physics World": "https://physicsworld.com/feed/",
+        "Climate Central": "https://www.climatecentral.org/rss/news.xml",
+        "Green Tech Media": "https://www.greentechmedia.com/rss/all"
     },
     
     "🔗 BLOCKCHAIN & CRYPTO": {
@@ -110,127 +67,11 @@ RSS_FEEDS = {
         "Data Science Central": "https://www.datasciencecentral.com/profiles/blog/feed"
     },
     
-    "🌍 WORLD NEWS": {
-        "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
-        "Deutsche Welle": "https://rss.dw.com/rdf/rss-en-all",
-        "France24": "https://www.france24.com/en/rss",
-        "RT": "https://www.rt.com/rss/",
-        "Times of India": "https://timesofindia.indiatimes.com/rssfeedtopstories.cms"
-    },
-    
-    "🍔 FOOD & COOKING": {
-        "Food Network": "https://www.foodnetwork.com/feeds/all-latest-recipes.xml",
-        "Bon Appétit": "https://www.bonappetit.com/feed/rss",
-        "Serious Eats": "https://feeds.feedburner.com/seriouseats/recipes",
-        "Epicurious": "https://www.epicurious.com/services/rss/recipes/latest"
-    },
-    
-    "🎨 DESIGN & CREATIVITY": {
-        "Behance": "https://feeds.feedburner.com/behance/vorr",
-        "Dribbble": "https://dribbble.com/shots/popular.rss",
-        "Creative Bloq": "https://www.creativebloq.com/feed",
-        "Smashing Magazine": "https://www.smashingmagazine.com/feed/"
-    },
-    
     "🌱 ENVIRONMENT & SUSTAINABILITY": {
         "TreeHugger": "https://www.treehugger.com/feeds/rss/",
         "Environmental News Network": "https://www.enn.com/rss/",
         "Climate Central": "https://www.climatecentral.org/rss/news.xml",
         "Green Tech Media": "https://www.greentechmedia.com/rss/all"
-    }
-
-# Comprehensive RSS Feed Categories
-RSS_FEEDS = {
-    "🤖 AI & MACHINE LEARNING": {
-        "Science Daily - AI": "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
-        "Science Daily - Technology": "https://www.sciencedaily.com/rss/top/technology.xml",
-        "O'Reilly Radar": "https://feeds.feedburner.com/oreilly-radar",
-        "Google AI Blog": "https://ai.googleblog.com/feeds/posts/default",
-        "OpenAI Blog": "https://openai.com/blog/rss.xml",
-        "DeepMind Blog": "https://deepmind.com/blog/feed/basic/",
-        "Microsoft AI Blog": "https://blogs.microsoft.com/ai/feed/",
-        "Machine Learning Mastery": "https://machinelearningmastery.com/feed/",
-        "MarkTechPost": "https://www.marktechpost.com/feed/",
-        "Berkeley AI Research": "https://bair.berkeley.edu/blog/feed.xml",
-        "Distill": "https://distill.pub/rss.xml",
-        "Unite.AI": "https://www.unite.ai/feed/",
-        "Crypto News": "https://www.crypto-news.net/feed/"
-    },
-    
-    "💰 FINANCE & BUSINESS": {
-        "Investing.com": "https://www.investing.com/rss/news.rss",
-        "Seeking Alpha": "https://seekingalpha.com/market_currents.xml",
-        "Fortune": "https://fortune.com/feed",
-        "Forbes Business": "https://www.forbes.com/business/feed/",
-        "Economic Times": "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
-        "CNBC": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
-        "Yahoo Finance": "https://finance.yahoo.com/news/rssindex",
-        "Financial Samurai": "https://www.financialsamurai.com/feed/",
-        "NerdWallet": "https://www.nerdwallet.com/blog/feed/",
-        "Money Under 30": "https://www.moneyunder30.com/feed",
-        "Wall Street Journal": "https://www.wsj.com/xml/rss/3_7085.xml",
-        "Bloomberg": "https://feeds.bloomberg.com/markets/news.rss"
-    },
-    
-    "🔬 SCIENCE & PHYSICS": {
-        "Phys.org": "https://phys.org/rss-feed/",
-        "Nature": "https://www.nature.com/nature.rss",
-        "Physical Review Letters": "https://feeds.aps.org/rss/recent/prl.xml",
-        "Scientific American": "https://rss.sciam.com/ScientificAmerican-Global",
-        "New Scientist": "https://www.newscientist.com/feed/home/",
-        "Physics World": "https://physicsworld.com/feed/",
-        "Symmetry Magazine": "https://www.symmetrymagazine.org/rss/all-articles.xml",
-        "Space.com": "https://www.space.com/feeds/all",
-        "NASA Breaking News": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
-        "Sky & Telescope": "https://www.skyandtelescope.com/feed/",
-        "Science Daily": "https://www.sciencedaily.com/rss/all.xml"
-    },
-    
-    "💻 TECHNOLOGY": {
-        "TechCrunch": "https://techcrunch.com/feed/",
-        "Fox Sports": "https://api.foxsports.com/v1/rss?partnerKey=zBaFxRyGKCfxBagJG9b8pqLyndmvo7UU",
-        "Sports Illustrated": "https://www.si.com/rss/si_topstories.rss",
-        "Bleacher Report": "https://bleacherreport.com/articles/feed",
-        "The Athletic": "https://theathletic.com/rss/",
-        "Yahoo Sports": "https://sports.yahoo.com/rss/",
-        "CBS Sports": "https://www.cbssports.com/rss/headlines",
-        "NFL": "https://www.nfl.com/feeds/rss/news",
-        "NBA": "https://www.nba.com/rss/nba_rss.xml"
-    },
-    
-    "🎬 ENTERTAINMENT": {
-        "Entertainment Weekly": "https://ew.com/feed/",
-        "Variety": "https://variety.com/feed/",
-        "The Hollywood Reporter": "https://www.hollywoodreporter.com/feed/",
-        "Rolling Stone": "https://www.rollingstone.com/feed",
-        "Bitcoin Magazine": "https://bitcoinmagazine.com/.rss/full/"
-    },
-    
-    "🏥 HEALTH & MEDICINE": {
-        "WebMD": "https://rssfeeds.webmd.com/rss/rss.aspx?RSSSource=RSS_PUBLIC",
-        "Mayo Clinic": "https://newsnetwork.mayoclinic.org/feed/",
-        "Harvard Health": "https://www.health.harvard.edu/blog/feed",
-        "Medical News Today": "https://www.medicalnewstoday.com/rss",
-        "Healthline": "https://www.healthline.com/rss"
-    },
-    
-    "🔗 BLOCKCHAIN & CRYPTO": {
-        "CoinTelegraph": "https://cointelegraph.com/rss",
-        "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
-        "Decrypt": "https://decrypt.co/feed",
-        "The Block": "https://www.theblockcrypto.com/rss.xml"
-    },
-    
-    "📊 DATA SCIENCE": {
-        "KDnuggets": "https://www.kdnuggets.com/feed",
-        "Analytics Vidhya": "https://www.analyticsvidhya.com/feed/",
-        "Towards Data Science": "https://towardsdatascience.com/feed"
-    },
-    
-    "🌱 ENVIRONMENT & SUSTAINABILITY": {
-        "TreeHugger": "https://www.treehugger.com/feeds/rss/",
-        "Environmental News Network": "https://www.enn.com/rss/",
-        "Climate Central": "https://www.climatecentral.org/rss/news.xml"
     }
 }
 
@@ -238,15 +79,15 @@ def get_all_feeds_list():
     """Get a flat list of all feeds for dropdown"""
     feeds_list = []
     for category, feeds in RSS_FEEDS.items():
-        for name, url in feeds.items():
+        for name in feeds.keys():  # Use keys directly
             feeds_list.append(f"{category} - {name}")
     return feeds_list
 
 def get_feed_url_by_name(feed_name):
     """Get RSS URL by feed name"""
     for category, feeds in RSS_FEEDS.items():
-        for name, url in feeds.items():
-            if f"{category} - {name}" == feed_name:
+        if f"{category} - {" ".join(category.split())}" == feed_name:  # Normalize the category
+            for name, url in feeds.items():
                 return url
     return None
 
@@ -309,23 +150,7 @@ def load_preset_feed(feed_name):
     if url:
         feed_info, df = fetch_rss_feed(url)
         return url, feed_info, df, df
-    return "", "Feed not found", pd.DataFrame(), pd.DataFrame()
-
-def get_all_feeds_list():
-    """Get a flat list of all feeds for dropdown"""
-    feeds_list = []
-    for category in RSS_FEEDS.keys():
-        for name in RSS_FEEDS[category].keys():
-            feeds_list.append(f"{category} - {name}")
-    return feeds_list
-
-def get_feed_url_by_name(feed_name):
-    """Get RSS URL by feed name"""
-    for category, feeds in RSS_FEEDS.items():
-        for name, url in feeds.items():
-            if f"{category} - {name}" == feed_name:
-                return url
-    return None
+    return "", "Feed not found", pd.DataFrame()
 
 # Create Gradio interface
 with gr.Blocks(title="RSS Feed Helper", theme=gr.themes.Soft()) as app:
@@ -432,4 +257,4 @@ with gr.Blocks(title="RSS Feed Helper", theme=gr.themes.Soft()) as app:
     )
 
 if __name__ == "__main__":
-    app.launch(share=False)
+    app.launch()
