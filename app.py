@@ -1,127 +1,68 @@
-import feedparser
-from gradio import interfaces, blocks
 import gradio as gr
-import threading
+from urllib.request import urlopen
+from xml.etree import ElementTree as ET
+import time
 
-class RSSFeed:
-    def __init__(self, name, url):
-        self.name = name
-        self.url = url
-        self.entries = []
+class RSSReader:
+    def __init__(self, rss_feed_url):
+        self.rss_feed_url = rss_feed_url
+        self.rss_data = None
+        self.load_rss()
 
-    def fetch(self):
-        parsed_feed = feedparser.parse(self.url)
-        for entry in parsed_feed.entries:
-            self.entries.append(entry)
+    def load_rss(self):
+        response = urlopen(self.rss_feed_url)
+        self.rss_data = ET.parse(response).getroot()
+    
+    def get_entries(self):
+        entries = []
+        for item in self.rss_data.findall('.//item'):
+            title = item.find('title').text
+            link = item.find('link').text
+            description = item.find('description').text
+            pub_date = time.strptime(item.find('pubDate').text, "%a, %d %b %Y %H:%M:%S +0000")
+            entries.append({
+                "title": title,
+                "link": link,
+                "description": description,
+                "date": time.strftime("%a, %d %b %Y %H:%M:%S", pub_date)
+            })
+        return entries
 
-# Sample function to refresh feeds
-def refresh_feeds(feeds):
-    for feed in feeds.values():
-        feed.fetch()
-
-# List of RSS feeds with categories
-RSS_FEEDS = {
-    "🤖 AI & MACHINE LEARNING": {
-        "Science Daily - AI": "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
-        # Add more feeds here...
-    },
+def display_rss_feed(rss_reader):
+    # Get the RSS feed items
+    entries = rss_reader.get_entries()
     
-    "💰 FINANCE & BUSINESS": {
-        "Investing.com": "https://www.investing.com/rss/news.rss",
-        # Add more feeds here...
-    },
+    # Create a simple UI using Gradio
+    title = "RSS Feed Reader"
+    description = "Select an RSS feed to view the latest articles."
     
-    "🔬 SCIENCE & PHYSICS": {
-        "Phys.org": "https://phys.org/rss-feed/",
-        # Add more feeds here...
-    },
-    
-    "💻 TECHNOLOGY": {
-        "TechCrunch": "https://techcrunch.com/feed/",
-        # Add more feeds here...
-    },
-    
-    "📰 GENERAL NEWS": {
-        "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
-        # Add more feeds here...
-    },
-    
-    "🏈 SPORTS": {
-        "ESPN": "https://www.espn.com/espn/rss/news",
-        # Add more feeds here...
-    },
-    
-    "🎬 ENTERTAINMENT": {
-        "Entertainment Weekly": "https://ew.com/feed/",
-        # Add more feeds here...
-    },
-    
-    "🏥 HEALTH & MEDICINE": {
-        "WebMD": "https://rssfeeds.webmd.com/rss/rss.aspx?RSSSource=RSS_PUBLIC",
-        # Add more feeds here...
-    },
-    
-    "🔗 BLOCKCHAIN & CRYPTO": {
-        "CoinTelegraph": "https://cointelegraph.com/rss",
-        # Add more feeds here...
-    },
-    
-    "📊 DATA SCIENCE": {
-        "KDnuggets": "https://www.kdnuggets.com/feed",
-        # Add more feeds here...
-    },
-    
-    "🌍 WORLD NEWS": {
-        "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
-        # Add more feeds here...
-    },
-    
-    "🍔 FOOD & COOKING": {
-        "Food Network": "https://www.foodnetwork.com/feeds/all-latest-recipes.xml",
-        # Add more feeds here...
-    },
-    
-    "🎨 DESIGN & CREATIVITY": {
-        "Behance": "https://feeds.feedburner.com/behance/vorr",
-        # Add more feeds here...
-    },
-    
-    "🌱 ENVIRONMENT & SUSTAINABILITY": {
-        "TreeHugger": "https://www.treehugger.com/feeds/rss/",
-        # Add more feeds here...
-    }
-}
-
-# Initialize feeds
-class FeedManager:
-    def __init__(self):
-        self.feeds = {name: RSSFeed(name, url) for name, feeds in RSS_FEEDS.items() for url in feeds.values()}
-    
-    def refresh(self):
-        threading.Thread(target=self.refresh_feeds).start()
+    # Build the UI
+    with gr.Blocks() as demo:
+        gr.Markdown(description)
         
-    def refresh_feeds(self):
-        # Placeholder function to fetch feeds
-        print("Refreshing feeds...")
-        # Implement actual fetching logic here if needed
+        selected_feed = gr.Dropdown(label="Select RSS Feed", value=list(RSS_FEEDS.keys())[0], choices=RSS_FEEDS.keys())
+        output_area = gr.Textbox()
 
-def main():
-    # Create a FeedManager instance
-    feed_manager = FeedManager()
-    
-    # Define the UI components
-    title_block = blocks.Textbox(label="Title")
-    description_block = blocks.Textbox(label="Description")
-    
-    interface = gr.Interface(
-        fn=lambda title, description: (title, description),  # Example function to display text
-        inputs=[title_block, description_block],
-        outputs=[blocks.Label(label="Feed Item"), blocks.Label(label="Feed Description")],
-        title="RSS Reader",
-        layout=gr.Layout(direction='rows', columns=1),
-    )
-    
-    interface.launch(share=True)
+        @selected_feed.change()
+        def update_feed(feed):
+            # Load the corresponding RSS feed
+            if feed:
+                rss_reader = RSSReader(RSS_FEEDS[feed])
+                entries = rss_reader.get_entries()
+                
+                # Create a text area to display the feed items
+                output_area.value = "\n".join(f"- {entry['title']} ({entry['date']}) - [Read Article]({entry['link']})" for entry in entries)
+            else:
+                output_area.value = "No RSS Feed Selected"
 
+        gr.Column([gr.Markdown(title), selected_feed, output_area])
+
+    return demo
+
+# Create a sample feed reader
+rss_reader = RSSReader(RSS_FEEDS["🤖 AI & MACHINE LEARNING"]["Science Daily - AI"])
+demo = display_rss_feed(rss_reader)
+
+# Launch the application
 if __name__ == "__main__":
-    main()
+    gr.Interface(demo, title="RSS Feed Reader").launch()
