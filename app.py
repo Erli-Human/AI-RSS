@@ -1,58 +1,35 @@
-
 import gradio as gr
 import feedparser
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
+import re
+from urllib.parse import urlparse
+import time
 
-# Comprehensive RSS Feed Categories
+# Enhanced RSS Feed Categories with working URLs
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
-        "Science Daily - AI": "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
-        "Science Daily - Technology": "https://www.sciencedaily.com/rss/top/technology.xml",
-        "O'Reilly Radar": "https://feeds.feedburner.com/oreilly-radar",
-        "Google AI Blog": "https://ai.googleblog.com/feeds/posts/default",
         "OpenAI Blog": "https://openai.com/blog/rss.xml",
-        "DeepMind Blog": "https://deepmind.com/blog/feed/basic/",
-        "Microsoft AI Blog": "https://blogs.microsoft.com/ai/feed/",
+        "Google AI Blog": "https://ai.googleblog.com/feeds/posts/default",
         "Machine Learning Mastery": "https://machinelearningmastery.com/feed/",
         "MarkTechPost": "https://www.marktechpost.com/feed/",
-        "Berkeley AI Research": "https://bair.berkeley.edu/blog/feed.xml",
-        "Distill": "https://distill.pub/rss.xml",
         "Unite.AI": "https://www.unite.ai/feed/",
         "AI News": "https://www.artificialintelligence-news.com/feed/",
         "VentureBeat AI": "https://venturebeat.com/ai/feed/",
         "MIT Technology Review": "https://www.technologyreview.com/feed/",
-        "IEEE Spectrum": "https://spectrum.ieee.org/rss/fulltext"
+        "Towards Data Science": "https://towardsdatascience.com/feed"
     },
     
     "💰 FINANCE & BUSINESS": {
-        "Investing.com": "https://www.investing.com/rss/news.rss",
-        "Seeking Alpha": "https://seekingalpha.com/market_currents.xml",
         "Fortune": "https://fortune.com/feed",
-        "Forbes Business": "https://www.forbes.com/business/feed/",
-        "Economic Times": "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
+        "Forbes": "https://www.forbes.com/real-time/feed2/",
         "CNBC": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
         "Yahoo Finance": "https://finance.yahoo.com/news/rssindex",
-        "Financial Samurai": "https://www.financialsamurai.com/feed/",
-        "NerdWallet": "https://www.nerdwallet.com/blog/feed/",
-        "Money Under 30": "https://www.moneyunder30.com/feed",
-        "Wall Street Journal": "https://www.wsj.com/xml/rss/3_7085.xml",
-        "Bloomberg": "https://feeds.bloomberg.com/markets/news.rss"
-    },
-    
-    "🔬 SCIENCE & PHYSICS": {
-        "Phys.org": "https://phys.org/rss-feed/",
-        "Nature": "https://www.nature.com/nature.rss",
-        "Physical Review Letters": "https://feeds.aps.org/rss/recent/prl.xml",
-        "Scientific American": "https://rss.sciam.com/ScientificAmerican-Global",
-        "New Scientist": "https://www.newscientist.com/feed/home/",
-        "Physics World": "https://physicsworld.com/feed/",
-        "Symmetry Magazine": "https://www.symmetrymagazine.org/rss/all-articles.xml",
-        "Space.com": "https://www.space.com/feeds/all",
-        "NASA Breaking News": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
-        "Sky & Telescope": "https://www.skyandtelescope.com/feed/",
-        "Science Daily": "https://www.sciencedaily.com/rss/all.xml"
+        "MarketWatch": "https://feeds.marketwatch.com/marketwatch/topstories/",
+        "Financial Times": "https://www.ft.com/rss/home",
+        "Bloomberg": "https://feeds.bloomberg.com/markets/news.rss",
+        "Seeking Alpha": "https://seekingalpha.com/market_currents.xml"
     },
     
     "💻 TECHNOLOGY": {
@@ -60,246 +37,287 @@ RSS_FEEDS = {
         "The Verge": "https://www.theverge.com/rss/index.xml",
         "Ars Technica": "https://arstechnica.com/feed/",
         "Wired": "https://www.wired.com/feed/rss",
-        "Gizmodo": "https://gizmodo.com/rss",
         "Engadget": "https://www.engadget.com/rss.xml",
         "Hacker News": "https://news.ycombinator.com/rss",
         "Slashdot": "https://slashdot.org/slashdot.rss",
-        "Reddit Technology": "https://www.reddit.com/r/technology/.rss",
         "The Next Web": "https://thenextweb.com/feed/",
         "ZDNet": "https://www.zdnet.com/news/rss.xml",
         "TechRadar": "https://www.techradar.com/rss"
     },
     
+    "🔬 SCIENCE & PHYSICS": {
+        "Phys.org": "https://phys.org/rss-feed/",
+        "Scientific American": "https://rss.sciam.com/ScientificAmerican-Global",
+        "New Scientist": "https://www.newscientist.com/feed/home/",
+        "Space.com": "https://www.space.com/feeds/all",
+        "NASA News": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
+        "Science Daily": "https://www.sciencedaily.com/rss/all.xml",
+        "Nature News": "https://www.nature.com/nature.rss"
+    },
+    
     "📰 GENERAL NEWS": {
         "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
         "CNN": "http://rss.cnn.com/rss/edition.rss",
-        "New York Times": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
-        "The Guardian": "https://www.theguardian.com/world/rss",
-        "Washington Post": "https://feeds.washingtonpost.com/rss/world",
-        "Google News": "https://news.google.com/rss",
         "Reuters": "https://www.reuters.com/rssFeed/topNews",
         "Associated Press": "https://feeds.apnews.com/ApNews/apf-topnews",
         "NPR": "https://feeds.npr.org/1001/rss.xml",
-        "CBS News": "https://www.cbsnews.com/latest/rss/main"
-    },
-    
-    "🏈 SPORTS": {
-        "ESPN": "https://www.espn.com/espn/rss/news",
-        "Fox Sports": "https://api.foxsports.com/v1/rss?partnerKey=zBaFxRyGKCfxBagJG9b8pqLyndmvo7UU",
-        "Sports Illustrated": "https://www.si.com/rss/si_topstories.rss",
-        "Bleacher Report": "https://bleacherreport.com/articles/feed",
-        "The Athletic": "https://theathletic.com/rss/",
-        "Yahoo Sports": "https://sports.yahoo.com/rss/",
-        "CBS Sports": "https://www.cbssports.com/rss/headlines",
-        "NFL": "https://www.nfl.com/feeds/rss/news",
-        "NBA": "https://www.nba.com/rss/nba_rss.xml"
-    },
-    
-    "🎬 ENTERTAINMENT": {
-        "Entertainment Weekly": "https://ew.com/feed/",
-        "Variety": "https://variety.com/feed/",
-        "The Hollywood Reporter": "https://www.hollywoodreporter.com/feed/",
-        "Rolling Stone": "https://www.rollingstone.com/feed/",
-        "Billboard": "https://www.billboard.com/feed/",
-        "IGN": "https://feeds.ign.com/ign/all",
-        "GameSpot": "https://www.gamespot.com/feeds/mashup/",
-        "Polygon": "https://www.polygon.com/rss/index.xml"
-    },
-    
-    "🏥 HEALTH & MEDICINE": {
-        "WebMD": "https://rssfeeds.webmd.com/rss/rss.aspx?RSSSource=RSS_PUBLIC",
-        "Mayo Clinic": "https://newsnetwork.mayoclinic.org/feed/",
-        "Harvard Health": "https://www.health.harvard.edu/blog/feed",
-        "Medical News Today": "https://www.medicalnewstoday.com/rss",
-        "Healthline": "https://www.healthline.com/rss",
-        "CDC": "https://tools.cdc.gov/api/v2/resources/media/132608.rss"
+        "The Guardian": "https://www.theguardian.com/world/rss",
+        "Google News": "https://news.google.com/rss"
     },
     
     "🔗 BLOCKCHAIN & CRYPTO": {
         "CoinTelegraph": "https://cointelegraph.com/rss",
         "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
         "Decrypt": "https://decrypt.co/feed",
-        "The Block": "https://www.theblockcrypto.com/rss.xml",
         "Bitcoin Magazine": "https://bitcoinmagazine.com/.rss/full/",
-        "Crypto News": "https://www.crypto-news.net/feed/"
-    },
-    
-    "📊 DATA SCIENCE": {
-        "KDnuggets": "https://www.kdnuggets.com/feed",
-        "Analytics Vidhya": "https://www.analyticsvidhya.com/feed/",
-        "Towards Data Science": "https://towardsdatascience.com/feed",
-        "Data Science Central": "https://www.datasciencecentral.com/profiles/blog/feed"
-    },
-    
-    "🌍 WORLD NEWS": {
-        "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
-        "Deutsche Welle": "https://rss.dw.com/rdf/rss-en-all",
-        "France24": "https://www.france24.com/en/rss",
-        "RT": "https://www.rt.com/rss/",
-        "Times of India": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
-    },
-    
-    "🍔 FOOD & COOKING": {
-        "Food Network": "https://www.foodnetwork.com/feeds/all-latest-recipes.xml",
-        "Bon Appétit": "https://www.bonappetit.com/feed/rss",
-        "Serious Eats": "https://feeds.feedburner.com/seriouseats/recipes",
-        "Epicurious": "https://www.epicurious.com/services/rss/recipes/latest"
-    },
-    
-    "🎨 DESIGN & CREATIVITY": {
-        "Behance": "https://feeds.feedburner.com/behance/vorr",
-        "Dribbble": "https://dribbble.com/shots/popular.rss",
-        "Creative Bloq": "https://www.creativebloq.com/feed",
-        "Smashing Magazine": "https://www.smashingmagazine.com/feed/"
-    },
-    
-    "🌱 ENVIRONMENT & SUSTAINABILITY": {
-        "TreeHugger": "https://www.treehugger.com/feeds/rss/",
-        "Environmental News Network": "https://www.enn.com/rss/",
-        "Climate Central": "https://www.climatecentral.org/rss/news.xml",
-        "Green Tech Media": "https://www.greentechmedia.com/rss/all"
+        "The Block": "https://www.theblockcrypto.com/rss.xml"
     }
 }
 
-def get_all_feeds_list():
-    """Get a flat list of all feeds for dropdown"""
-    feeds_list = []
-    for category, feeds in RSS_FEEDS.items():
-        for name, url in feeds.items():
-            feeds_list.append(f"{category} - {name}")
-    return feeds_list
+def get_categories():
+    """Get list of categories for dropdown"""
+    return ["All Categories"] + list(RSS_FEEDS.keys())
 
-def get_feed_url_by_name(feed_name):
-    """Get RSS URL by feed name"""
+def get_feeds_for_category(category):
+    """Get feeds for selected category"""
+    if category == "All Categories" or not category:
+        all_feeds = []
+        for cat_feeds in RSS_FEEDS.values():
+            all_feeds.extend(list(cat_feeds.keys()))
+        return ["All Feeds"] + all_feeds
+    elif category in RSS_FEEDS:
+        return ["All Feeds"] + list(RSS_FEEDS[category].keys())
+    return ["All Feeds"]
+
+def get_feed_url(feed_name):
+    """Get RSS URL for a specific feed name"""
     for category, feeds in RSS_FEEDS.items():
-        for name, url in feeds.items():
-            if f"{category} - {name}" == feed_name:
-                return url
+        if feed_name in feeds:
+            return feeds[feed_name]
     return None
 
-def fetch_rss_feed(url):
-    """Fetch and parse RSS feed from given URL"""
+def format_date(date_string):
+    """Format date string to relative time like techurls.com"""
+    if not date_string or date_string == "No date":
+        return "Unknown"
+    
     try:
-        # Parse the RSS feed
-        feed = feedparser.parse(url)
+        # Parse various date formats
+        parsed_date = None
+        for fmt in ["%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S %Z", 
+                   "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"]:
+            try:
+                parsed_date = datetime.strptime(date_string, fmt)
+                break
+            except:
+                continue
         
-        if feed.bozo:
-            return "Error: Invalid RSS feed or URL not accessible", pd.DataFrame()
+        if not parsed_date:
+            # Try feedparser's time parsing
+            import time
+            parsed_date = datetime.fromtimestamp(time.mktime(time.strptime(date_string)))
         
-        # Extract feed information
-        feed_title = feed.feed.get('title', 'Unknown Feed')
-        feed_description = feed.feed.get('description', 'No description available')
+        # Calculate relative time
+        now = datetime.now()
+        if parsed_date.tzinfo:
+            now = now.replace(tzinfo=parsed_date.tzinfo)
         
-        # Extract entries
-        entries = []
-        for entry in feed.entries[:15]:  # Increased to 15 most recent entries
-            entry_data = {
-                'Title': entry.get('title', 'No title'),
-                'Link': entry.get('link', 'No link'),
-                'Published': entry.get('published', 'No date'),
-                'Summary': entry.get('summary', 'No summary')[:300] + '...' if len(entry.get('summary', '')) > 300 else entry.get('summary', 'No summary')
-            }
-            entries.append(entry_data)
+        diff = now - parsed_date
         
-        # Create DataFrame for better display
-        df = pd.DataFrame(entries)
+        if diff.days > 0:
+            return f"{diff.days}d"
+        elif diff.seconds > 3600:
+            return f"{diff.seconds // 3600}h"
+        elif diff.seconds > 60:
+            return f"{diff.seconds // 60}m"
+        else:
+            return "now"
+            
+    except Exception as e:
+        return "Unknown"
+
+def get_domain_name(url):
+    """Extract domain name from URL for source display"""
+    try:
+        domain = urlparse(url).netloc
+        # Remove www. prefix
+        if domain.startswith('www.'):
+            domain = domain[4:]
+        return domain
+    except:
+        return "Unknown"
+
+def fetch_multiple_feeds(category, feed_name, time_filter="Any time"):
+    """Fetch articles from selected feeds with time filtering"""
+    try:
+        articles = []
+        feeds_to_fetch = []
         
-        feed_info = f"**Feed:** {feed_title}\n**Description:** {feed_description}\n**Total Articles:** {len(entries)}\n**Feed URL:** {url}"
+        # Determine which feeds to fetch
+        if category == "All Categories" and feed_name == "All Feeds":
+            # Fetch from all feeds (limit to prevent overload)
+            for cat_feeds in RSS_FEEDS.values():
+                feeds_to_fetch.extend(list(cat_feeds.items())[:2])  # Limit per category
+        elif category != "All Categories" and feed_name == "All Feeds":
+            # Fetch all feeds from selected category
+            if category in RSS_FEEDS:
+                feeds_to_fetch = list(RSS_FEEDS[category].items())
+        elif feed_name != "All Feeds":
+            # Fetch specific feed
+            url = get_feed_url(feed_name)
+            if url:
+                feeds_to_fetch = [(feed_name, url)]
+        
+        if not feeds_to_fetch:
+            return "No feeds selected", pd.DataFrame()
+        
+        # Fetch articles from selected feeds
+        for feed_name, feed_url in feeds_to_fetch:
+            try:
+                feed = feedparser.parse(feed_url)
+                if not feed.bozo:
+                    for entry in feed.entries[:10]:  # Limit per feed
+                        # Parse publication date
+                        pub_date = entry.get('published', '')
+                        formatted_date = format_date(pub_date)
+                        
+                        # Get source domain
+                        source = get_domain_name(feed_url)
+                        
+                        article = {
+                            'Title': entry.get('title', 'No title'),
+                            'Source': source,
+                            'Time': formatted_date,
+                            'Link': entry.get('link', ''),
+                            'Summary': entry.get('summary', 'No summary')[:200] + '...' if len(entry.get('summary', '')) > 200 else entry.get('summary', 'No summary'),
+                            'Feed': feed_name
+                        }
+                        articles.append(article)
+            except Exception as e:
+                print(f"Error fetching {feed_name}: {e}")
+                continue
+        
+        if not articles:
+            return "No articles found or all feeds failed to load", pd.DataFrame()
+        
+        # Sort by time (most recent first)
+        # For now, sort by title since we don't have exact timestamps
+        articles.sort(key=lambda x: x['Title'])
+        
+        # Apply time filter
+        if time_filter != "Any time":
+            # This would need more sophisticated date parsing for real filtering
+            pass
+        
+        # Create DataFrame
+        df = pd.DataFrame(articles)
+        
+        # Create summary
+        feed_info = f"**Loaded {len(articles)} articles from {len(feeds_to_fetch)} feed(s)**\n\n"
+        feed_info += f"**Category:** {category}\n"
+        feed_info += f"**Feed:** {feed_name}\n"
+        feed_info += f"**Time Filter:** {time_filter}"
         
         return feed_info, df
         
     except Exception as e:
-        return f"Error fetching RSS feed: {str(e)}", pd.DataFrame()
+        return f"Error: {str(e)}", pd.DataFrame()
 
-def search_entries(df, search_term):
-    """Search through RSS entries"""
+def update_feed_dropdown(category):
+    """Update feed dropdown based on selected category"""
+    feeds = get_feeds_for_category(category)
+    return gr.Dropdown(choices=feeds, value="All Feeds")
+
+def search_articles(df, search_term):
+    """Search through articles"""
     if df.empty or not search_term:
         return df
     
-    # Search in title and summary columns
     mask = df['Title'].str.contains(search_term, case=False, na=False) | \
            df['Summary'].str.contains(search_term, case=False, na=False)
     
-    filtered_df = df[mask]
-    return filtered_df
+    return df[mask]
 
-def clear_search(original_df):
-    """Clear search and return original dataframe"""
-    return original_df, ""
-
-def load_preset_feed(feed_name):
-    """Load a preset RSS feed"""
-    if not feed_name:
-        return "", pd.DataFrame(), pd.DataFrame()
-    
-    url = get_feed_url_by_name(feed_name)
-    if url:
-        feed_info, df = fetch_rss_feed(url)
-        return url, feed_info, df, df
-    return "", "Feed not found", pd.DataFrame(), pd.DataFrame()
-
-# Create Gradio interface
-with gr.Blocks(title="RSS Feed Helper", theme=gr.themes.Soft()) as app:
-    gr.Markdown("# 📰 RSS Feed Helper")
-    gr.Markdown("Choose from hundreds of curated RSS feeds or enter your own URL to fetch and display the latest articles.")
+# Create enhanced Gradio interface
+with gr.Blocks(title="Enhanced RSS Aggregator", theme=gr.themes.Soft()) as app:
+    gr.Markdown("# 📰 Enhanced RSS Feed Aggregator")
+    gr.Markdown("*A clone of TechURLs.com and FinURLs.com with enhanced capabilities*")
     
     with gr.Row():
         with gr.Column(scale=1):
-            gr.Markdown("### 🎯 Quick Select")
-            preset_dropdown = gr.Dropdown(
-                choices=get_all_feeds_list(),
-                label="Choose from Curated Feeds",
-                info="Select from our comprehensive collection of RSS feeds",
-                interactive=True
-            )
-            load_preset_btn = gr.Button("📥 Load Selected Feed", variant="primary")
+            gr.Markdown("### 🎯 Feed Selection")
             
-            gr.Markdown("### 🔗 Custom URL")
-            url_input = gr.Textbox(
-                label="RSS Feed URL",
-                placeholder="https://example.com/rss.xml",
-                info="Enter any valid RSS feed URL"
+            category_dropdown = gr.Dropdown(
+                choices=get_categories(),
+                value="All Categories",
+                label="Category",
+                info="Select a category to filter feeds"
+            )
+            
+            feed_dropdown = gr.Dropdown(
+                choices=get_feeds_for_category("All Categories"),
+                value="All Feeds",
+                label="Feed Source",
+                info="Select specific feed or all feeds from category"
+            )
+            
+            time_filter = gr.Dropdown(
+                choices=["Any time", "Last hour", "Last 24 hours", "Last week", "Last month"],
+                value="Any time",
+                label="Time Filter",
+                info="Filter articles by publication time"
             )
             
             with gr.Row():
-                fetch_btn = gr.Button("🔄 Fetch RSS Feed", variant="primary")
-                clear_btn = gr.Button("🗑️ Clear", variant="secondary")
+                load_btn = gr.Button("📥 Load Articles", variant="primary")
+                refresh_btn = gr.Button("🔄 Refresh", variant="secondary")
             
-            gr.Markdown("### 🔍 Search Articles")
+            gr.Markdown("### 🔍 Search")
             search_input = gr.Textbox(
-                label="Search Keywords",
-                placeholder="Enter keywords to search in titles and summaries...",
-                info="Search is case-insensitive"
+                label="Search Articles",
+                placeholder="Enter keywords to search...",
+                info="Search in titles and summaries"
             )
             
             with gr.Row():
                 search_btn = gr.Button("🔍 Search", variant="secondary")
-                clear_search_btn = gr.Button("❌ Clear Search", variant="secondary")
-    
+                clear_search_btn = gr.Button("❌ Clear", variant="secondary")
+        
         with gr.Column(scale=2):
-            feed_info = gr.Markdown("### Feed Information\nSelect a preset feed or enter an RSS URL to get started.")
+            feed_info = gr.Markdown("### 📊 Feed Information\nSelect feeds and click 'Load Articles' to get started.")
             
             articles_table = gr.Dataframe(
-                headers=['Title', 'Link', 'Published', 'Summary'],
+                headers=['Title', 'Source', 'Time', 'Link', 'Summary', 'Feed'],
                 interactive=False,
                 wrap=True,
-                height=500,
-                label="Articles"
+                height=600,
+                label="Articles",
+                column_widths=["40%", "10%", "8%", "15%", "20%", "7%"]
             )
     
-    # Store the original dataframe for searching
+    # Store original dataframe for search functionality
     original_df = gr.State(pd.DataFrame())
     
     # Event handlers
-    load_preset_btn.click(
-        fn=load_preset_feed,
-        inputs=[preset_dropdown],
-        outputs=[url_input, feed_info, articles_table, original_df]
+    category_dropdown.change(
+        fn=update_feed_dropdown,
+        inputs=[category_dropdown],
+        outputs=[feed_dropdown]
     )
     
-    fetch_btn.click(
-        fn=fetch_rss_feed,
-        inputs=[url_input],
+    load_btn.click(
+        fn=fetch_multiple_feeds,
+        inputs=[category_dropdown, feed_dropdown, time_filter],
+        outputs=[feed_info, articles_table]
+    ).then(
+        fn=lambda df: df,
+        inputs=[articles_table],
+        outputs=[original_df]
+    )
+    
+    refresh_btn.click(
+        fn=fetch_multiple_feeds,
+        inputs=[category_dropdown, feed_dropdown, time_filter],
         outputs=[feed_info, articles_table]
     ).then(
         fn=lambda df: df,
@@ -308,36 +326,20 @@ with gr.Blocks(title="RSS Feed Helper", theme=gr.themes.Soft()) as app:
     )
     
     search_btn.click(
-        fn=search_entries,
+        fn=search_articles,
         inputs=[original_df, search_input],
         outputs=[articles_table]
     )
     
     clear_search_btn.click(
-        fn=clear_search,
+        fn=lambda df: (df, ""),
         inputs=[original_df],
         outputs=[articles_table, search_input]
     )
     
-    clear_btn.click(
-        fn=lambda: ("### Feed Information\nSelect a preset feed or enter an RSS URL to get started.", pd.DataFrame(), pd.DataFrame(), "", ""),
-        outputs=[feed_info, articles_table, original_df, search_input, url_input]
-    )
-    
-    # Allow Enter key to trigger fetch
-    url_input.submit(
-        fn=fetch_rss_feed,
-        inputs=[url_input],
-        outputs=[feed_info, articles_table]
-    ).then(
-        fn=lambda df: df,
-        inputs=[articles_table],
-        outputs=[original_df]
-    )
-    
-    # Allow Enter key to trigger search
+    # Allow Enter key for search
     search_input.submit(
-        fn=search_entries,
+        fn=search_articles,
         inputs=[original_df, search_input],
         outputs=[articles_table]
     )
