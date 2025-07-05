@@ -197,7 +197,7 @@ with gr.Blocks(title="RSS Feed Helper", theme=gr.themes.Soft()) as app:
                 headers=['Title', 'Link', 'Published', 'Summary'],
                 interactive=False,
                 wrap=True,
-                height=500,
+              #  height=500,
                 label="Articles"
             )
     
