@@ -8,7 +8,12 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import ollama
 import os
-from bs4 import BeautifulSoup # <--- ADD THIS IMPORT
+from bs4 import BeautifulSoup
+
+# --- New Imports for TTS ---
+import numpy as np
+import soundfile as sf # To save audio, as Karoko might output directly or need a save
+# import torch # Often needed for Karoko/Kokoro TTS models, include if your setup requires it
 
 # --- Data Structures ---
 @dataclass
@@ -163,6 +168,92 @@ GLOBAL_ARTICLE_CACHE: Dict[str, List[Article]] = {}
 # Global variable to store available Ollama models
 OLLAMA_MODELS: List[str] = []
 
+# --- TTS Integration (Karoko/Kokoro TTS) ---
+# IMPORTANT: This section is a placeholder for your actual Karoko TTS setup.
+# You MUST adapt this based on the Karoko TTS library/repository you are using.
+
+_KAROKO_TTS_AVAILABLE = False
+# Example of where you might load your Karoko TTS model once at startup:
+# karoko_model = None
+# try:
+#     # Assuming you have a Karoko TTS wrapper or direct model loading here
+#     # from your_karoko_module import KarokoTTSModel, KarokoVoice
+#     # karoko_model = KarokoTTSModel(model_path="path/to/your/kokoro.onnx", device="cpu")
+#     # _KAROKO_TTS_AVAILABLE = True
+#     print("Karoko/Kokoro TTS Placeholder: Ready to integrate your actual model.")
+# except ImportError:
+#     print("Karoko/Kokoro TTS library not found. Dummy audio will be used.")
+# except Exception as e:
+#     print(f"Error loading Karoko/Kokoro TTS model: {e}. Dummy audio will be used.")
+
+
+# Define a list of available female voices from Karoko/Kokoro TTS.
+# You will need to verify and update these with the actual voice IDs/names
+# provided by your specific Karoko TTS setup.
+FEMALE_VOICES = [
+    "af_bella", "af_nicole", "af_sarah", "af_sky", # Common examples
+    "bf_emma", "bf_isabella", # More examples
+    "en_US_f001_kokoro", # A hypothetical generic female voice ID
+    "female_default" # A generic fallback if specific names are unknown
+]
+# Set the default female voice, ensuring it's in the list
+DEFAULT_FEMALE_VOICE = "af_bella" if "af_bella" in FEMALE_VOICES else (FEMALE_VOICES[0] if FEMALE_VOICES else "default")
+
+
+def karoko_tts_generate_audio(text: str, voice_name: str = DEFAULT_FEMALE_VOICE) -> str:
+    """
+    Generates audio from text using Karoko TTS (or a dummy if not available).
+    Returns a path to a temporary audio file.
+    """
+    cleaned_text = BeautifulSoup(text, 'html.parser').get_text().strip()
+    if not cleaned_text:
+        return "" # Return empty if no text
+
+    if _KAROKO_TTS_AVAILABLE:
+        try:
+            print(f"Generating audio for: '{cleaned_text[:80]}...' with voice: {voice_name}")
+            # --- YOUR ACTUAL KAROKO TTS INTEGRATION GOES HERE ---
+            # This is where you would call your loaded Karoko TTS model.
+            # Example (if 'karoko_model' was loaded globally and has a synthesize method):
+            # audio_data_np, sample_rate = karoko_model.synthesize(cleaned_text, voice_id=voice_name)
+            # ----------------------------------------------------
+
+            # For demonstration without actual Karoko setup:
+            sample_rate = 22050
+            duration = min(len(cleaned_text) * 0.05, 15) # Max 15 seconds to prevent very long audios
+            t = np.linspace(0, duration, int(sample_rate * duration), False)
+            # Generate a slightly more complex dummy audio
+            audio_data_np = 0.4 * np.sin(2 * np.pi * 440 * t) + 0.2 * np.sin(2 * np.pi * 880 * t)
+            if len(cleaned_text) > 50: # Add more complexity for longer texts
+                audio_data_np += 0.1 * np.sin(2 * np.pi * 1200 * t + np.sin(t / 3))
+            audio_data_np = audio_data_np.astype(np.float32)
+
+            # Save to a temporary WAV file for Gradio
+            temp_file_path = f"temp_tts_audio_{os.getpid()}_{np.random.randint(0, 100000)}.wav"
+            sf.write(temp_file_path, audio_data_np, sample_rate)
+            return temp_file_path
+
+        except Exception as e:
+            print(f"Error during Karoko TTS generation: {e}. Falling back to dummy audio.")
+            # Fallback to a simple error tone if Karoko fails
+            sample_rate = 22050
+            duration = 2
+            t = np.linspace(0, duration, int(sample_rate * duration), False)
+            audio_data_np = 0.6 * np.sin(2 * np.pi * 100 * t) # Simple error tone
+            error_file_path = f"error_tts_audio_{os.getpid()}_{np.random.randint(0, 100000)}.wav"
+            sf.write(error_file_path, audio_data_np.astype(np.float32), sample_rate)
+            return error_file_path
+    else:
+        # Dummy audio generation if Karoko TTS is not enabled/available
+        print("Karoko TTS not available, generating dummy audio.")
+        sample_rate = 22050
+        duration = min(len(cleaned_text) * 0.05, 15)
+        t = np.linspace(0, duration, int(sample_rate * duration), False)
+        audio_data_np = 0.5 * np.sin(2 * np.pi * 440 * t) # A simple sine wave
+        dummy_file_path = f"dummy_tts_audio_{os.getpid()}_{np.random.randint(0, 100000)}.wav"
+        sf.write(dummy_file_path, audio_data_np.astype(np.float32), sample_rate)
+        return dummy_file_path
+
 # --- RSS Feed Functions ---
 def fetch_rss_feed_single(url: str, feed_name: str, timeout: int = 10) -> FeedData:
     """Fetch and parse a single RSS feed."""
@@ -191,7 +282,7 @@ def fetch_rss_feed_single(url: str, feed_name: str, timeout: int = 10) -> FeedDa
                 title=entry.get('title', 'No title'),
                 link=entry.get('link', ''),
                 published=entry.get('published', 'Unknown date'),
-                summary=entry.get('summary', 'No summary available'), # Keep full summary for Ollama
+                summary=entry.get('summary', 'No summary available'), # Keep full summary for Ollama and TTS
                 author=entry.get('author', 'Unknown author'),
                 feed_name=feed_name # Store the feed name with the article
             )
@@ -221,7 +312,7 @@ def fetch_rss_feed_single(url: str, feed_name: str, timeout: int = 10) -> FeedDa
 def fetch_all_feeds_parallel() -> Dict[str, Dict[str, FeedData]]:
     """Fetches all RSS feeds across all categories using parallel processing."""
     all_results: Dict[str, Dict[str, FeedData]] = {}
-    
+
     with ThreadPoolExecutor(max_workers=10) as executor: # Increased max_workers for more parallelism
         future_to_category = {}
         for category, feeds in RSS_FEEDS.items():
@@ -247,22 +338,25 @@ def fetch_all_feeds_parallel() -> Dict[str, Dict[str, FeedData]]:
             all_results[category] = category_results
     return all_results
 
-def get_article_preview(article: Article, preview_lines: int = 4) -> str:
-    """Generates a concise preview of an article, including a clickable link, feed name, author, and time."""
+def get_article_display_components(article: Article, preview_lines: int = 4) -> Tuple[str, gr.Button, gr.Dropdown, gr.Audio]:
+    """
+    Generates the Gradio components (Markdown string, Button, Dropdown, Audio)
+    for displaying a single article with its read-aloud functionality.
+    """
     # Ensure no HTML tags in the summary for plain text display and truncate
     clean_summary = BeautifulSoup(article.summary, 'html.parser').get_text().strip()
-    
+
     # Use Markdown for clickable link
     title_line = f"**[{article.title}]({article.link})**"
-    
+
     # Clearly identify the feed name, published date, and author
     info_line = f"**Feed:** {article.feed_name} | **Published:** {article.published} | **Author:** {article.author}"
-    
+
     # Truncate summary to the desired number of lines
     summary_lines = []
     current_line = ""
     words = clean_summary.split()
-    
+
     for word in words:
         if not current_line:
             current_line = word
@@ -273,81 +367,121 @@ def get_article_preview(article: Article, preview_lines: int = 4) -> str:
             current_line = word
             if len(summary_lines) >= preview_lines:
                 break
-    
+
     if current_line and len(summary_lines) < preview_lines:
         summary_lines.append(current_line)
 
     summary_preview = "\n".join(summary_lines)
-    
+
     # Add ellipsis if the original summary was longer than the preview
     if clean_summary and len(summary_preview.replace("\n", " ")) < len(clean_summary):
         summary_preview += "..."
 
-    return f"{title_line}\n{info_line}\nSummary: {summary_preview}"
+    article_markdown = f"{title_line}\n{info_line}\nSummary: {summary_preview}"
+
+    # Create components for each article
+    read_aloud_button = gr.Button("Read Aloud 🔊", interactive=True)
+    voice_selector = gr.Dropdown(
+        choices=FEMALE_VOICES,
+        value=DEFAULT_FEMALE_VOICE,
+        label="Select Voice",
+        interactive=True,
+        scale=0 # Shrink dropdown to fit
+    )
+    audio_output = gr.Audio(label="Listen Here", autoplay=False, show_label=False)
+
+    return article_markdown, read_aloud_button, voice_selector, audio_output
 
 
-def update_all_feed_tabs() -> Tuple[Any, ...]:
+def update_all_feed_tabs_and_render_articles() -> Tuple[Any, ...]:
     """
-    Fetches all feeds and updates the Gradio Textbox components for each category tab.
-    Returns a tuple of gr.Textbox components, one for each category.
+    Fetches all feeds, updates the global cache, and prepares the Gradio output
+    for each category tab, including dynamically created article blocks.
+    Returns a tuple of Gradio component updates for each category.
     """
     global GLOBAL_ARTICLE_CACHE
     all_feed_data_by_category = fetch_all_feeds_parallel()
-    
-    outputs = []
-    
+
+    # This list will hold the Gradio components for all tabs.
+    # Each item will be a list of lists of components for a specific tab.
+    all_tab_content_updates = []
+
     for category_name in RSS_FEEDS.keys():
         category_articles_for_cache: List[Article] = []
-        feed_outputs_for_category = ""
-        
+        # This will hold the dynamic UI elements for the current tab
+        current_tab_ui_elements: List[gr.Blocks] = []
+
         category_feeds = all_feed_data_by_category.get(category_name, {})
-        
-        for feed_name, feed_data in category_feeds.items():
-            if feed_data.status == "error":
-                feed_outputs_for_category += f"**{feed_name}**: Error: {feed_data.error}\n\n"
-            elif not feed_data.articles:
-                feed_outputs_for_category += f"**{feed_name}**: No articles found.\n\n"
-            else:
-                # Add all articles from this feed to the cache for the current category
-                # This ensures Ollama has full summaries, even if we only display a few
-                category_articles_for_cache.extend(feed_data.articles) 
-                
-                # Sort articles by published date (if available) and take the top 5
-                # Ensure 'published' is parseable for sorting. If not, fallback.
-                def get_sort_key(article):
-                    try:
-                        # Attempt to parse as the standard format we use
-                        return datetime.strptime(article.published, "%Y-%m-%d %H:%M:%S")
-                    except ValueError:
+
+        if not category_feeds:
+            # If no feeds for this category, display a message
+            current_tab_ui_elements.append(gr.Markdown(f"No feeds configured or found for {category_name}."))
+        else:
+            for feed_name, feed_data in category_feeds.items():
+                if feed_data.status == "error":
+                    current_tab_ui_elements.append(gr.Markdown(f"**{feed_name}**: Error: {feed_data.error}\n\n"))
+                elif not feed_data.articles:
+                    current_tab_ui_elements.append(gr.Markdown(f"**{feed_name}**: No articles found.\n\n"))
+                else:
+                    category_articles_for_cache.extend(feed_data.articles)
+
+                    def get_sort_key(article):
                         try:
-                            # Attempt to parse common RSS date formats
-                            parsed_date = feedparser._parse_date(article.published)
-                            if parsed_date:
-                                return datetime(*parsed_date[:6])
-                        except Exception:
-                            pass
-                        return datetime.min # Fallback for unparseable dates
+                            return datetime.strptime(article.published, "%Y-%m-%d %H:%M:%S")
+                        except ValueError:
+                            try:
+                                parsed_date = feedparser._parse_date(article.published)
+                                if parsed_date:
+                                    return datetime(*parsed_date[:6])
+                            except Exception:
+                                pass
+                            return datetime.min
 
-                display_articles = sorted(feed_data.articles, key=get_sort_key, reverse=True)[:5]
-                
-                feed_content = "\n\n---\n\n".join([get_article_preview(art) for art in display_articles])
-                feed_outputs_for_category += f"{feed_content}\n\n"
+                    display_articles = sorted(feed_data.articles, key=get_sort_key, reverse=True)[:5]
 
-        # Store all fetched articles (full content) for this category in the global cache
+                    for article in display_articles:
+                        with gr.Column(scale=1): # Use a column for each article block
+                            # Prepare article content
+                            article_markdown_str = f"### {article.title}\n" \
+                                                   f"**Source:** {article.feed_name} | **Published:** {article.published} | **Author:** {article.author}\n" \
+                                                   f"**Link:** [{article.link}]({article.link})\n" \
+                                                   f"{BeautifulSoup(article.summary, 'html.parser').get_text().strip()}"
+
+                            # Create Gradio components for the article
+                            article_text_display = gr.Markdown(article_markdown_str)
+                            with gr.Row():
+                                read_aloud_button = gr.Button("Read Aloud 🔊", interactive=True)
+                                voice_selector = gr.Dropdown(
+                                    choices=FEMALE_VOICES,
+                                    value=DEFAULT_FEMALE_VOICE,
+                                    label="Select Voice",
+                                    interactive=True,
+                                    scale=0 # Shrink dropdown
+                                )
+                            audio_output = gr.Audio(label="Listen Here", autoplay=False, show_label=False)
+
+                            # Link the read-aloud functionality
+                            read_aloud_button.click(
+                                fn=karoko_tts_generate_audio,
+                                inputs=[article_text_display, voice_selector],
+                                outputs=audio_output
+                            )
+                            current_tab_ui_elements.append(gr.HTML("<hr>")) # Separator
+
         GLOBAL_ARTICLE_CACHE[category_name] = category_articles_for_cache
-        
-        # Append the Textbox component update for the current category's tab.
-        outputs.append(gr.Textbox(value=feed_outputs_for_category.strip()))
-        
-    return tuple(outputs)
+        all_tab_content_updates.append(current_tab_ui_elements)
+
+    # Return a tuple of component lists for each tab.
+    # Gradio will then update the content of each gr.Group based on this.
+    return tuple(all_tab_content_updates)
 
 
 def list_cached_categories() -> gr.Dropdown:
     """Returns an updated Gradio Dropdown component with cached categories."""
     current_cached_categories = list(GLOBAL_ARTICLE_CACHE.keys())
     # Preserve the current value if it's still in the choices, otherwise set to None
-    return gr.Dropdown(choices=current_cached_categories, 
-                        value=None) # Set initial value to None for clarity on refresh
+    return gr.Dropdown(choices=current_cached_categories,
+                      value=None) # Set initial value to None for clarity on refresh
 
 
 # --- Ollama Integration ---
@@ -380,7 +514,7 @@ def get_ollama_models() -> List[str]:
             if not hasattr(model_entry, 'model'):
                 print(f"[{datetime.now()}] Warning: Model entry at index {i} missing 'model' attribute. Skipping. Entry: {model_entry}")
                 continue
-            
+
             models.append(model_entry.model)
 
         if not models:
@@ -406,7 +540,7 @@ print(f"Available Ollama Models: {ollama_available_models}")
 
 def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_model: str, chat_history: List[List[str]]) -> Tuple[List[List[str]], str]:
     """Generates insights from cached RSS articles using Ollama, maintaining chat history."""
-    
+
     if not selected_category: # Handle case where no category is selected initially
         response_text = "Please select a category from the 'Select Cached Category for Insights' dropdown."
         # Append as a new message pair
@@ -449,14 +583,13 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
     )
 
     messages = [{'role': 'system', 'content': system_prompt}]
-    
+
     # Add previous chat history to maintain context
     # Chatbot history in Gradio is a list of lists: [[user_msg, ai_msg], ...]
     for human_msg, ai_msg in chat_history:
         messages.append({'role': 'user', 'content': human_msg})
-        messages.append({'role': 'assistant', 'content': ai_msg})
-    
-    messages.append({'role': 'user', 'content': full_query_with_context})
+    messages.append({'role': 'user', 'content': user_query}) # Only add current user query, context is built dynamically
+    # The response will be appended after the ollama.chat call
 
     try:
         response = ollama.chat(model=ollama_model, messages=messages)
@@ -475,25 +608,26 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
 with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
     gr.Markdown("# Advanced RSS Feed Viewer & AI Assistant")
 
-    # Define all the Textbox components that will be updated
-    category_html_outputs: Dict[str, gr.Textbox] = {}
+    # Define a list to hold the dynamic content blocks for each tab.
+    # We will populate this list after the `gr.Blocks` context manager.
+    category_tab_content_blocks: List[gr.Group] = []
 
     with gr.Tab("RSS Feed Browser"):
         gr.Markdown("## Latest News Across Categories")
         fetch_all_button = gr.Button("Fetch All Feeds (This may take a moment)")
-        
+
         with gr.Tabs() as category_tabs:
             for category_name in RSS_FEEDS.keys():
                 with gr.Tab(category_name, id=f"tab_{category_name.replace(' ', '_').replace('&', 'and').lower()}"):
-                    # Initialize Textbox components for each category
-                    category_html_outputs[category_name] = gr.Textbox(
-                        label=f"Articles for {category_name}",
-                        lines=10, 
-                        max_lines=20, 
-                        interactive=False, 
-                        value="Click 'Fetch All Feeds' to load articles...",
-                        render=True # Ensure the component is rendered
-                    )
+                    # Create a gr.Group for each tab's content.
+                    # This group will be updated dynamically after fetch.
+                    # We store these group components in a list to reference later.
+                    category_group = gr.Group()
+                    category_tab_content_blocks.append(category_group)
+                    # Initial content for the group
+                    with category_group:
+                        gr.Markdown("Click 'Fetch All Feeds' to load articles...")
+
 
     with gr.Tab("AI News Insights"):
         gr.Markdown("## Get AI Insights from Fetched RSS Articles")
@@ -504,35 +638,30 @@ with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
                 value=default_ollama_model,
                 interactive=True
             )
-            # Initialize with all possible categories from RSS_FEEDS keys
-            # Set value to None initially to avoid "value not in choices" error
             cached_category_dropdown = gr.Dropdown(
                 label="Select Cached Category for Insights",
-                choices=list(RSS_FEEDS.keys()), # Initial choices from RSS_FEEDS keys
-                value=None, # Set initial value to None
+                choices=list(RSS_FEEDS.keys()),
+                value=None,
                 interactive=True
             )
-        
-        # Chat interface for Ollama
-        # Added type="messages" to address the UserWarning in Gradio and ensure correct format
-        chatbot = gr.Chatbot(label="Ollama Chat History", height=300, type="messages") 
+
+        chatbot = gr.Chatbot(label="Ollama Chat History", height=300, type="messages")
         msg = gr.Textbox(label="Ask a question about the articles:", placeholder="e.g., What are the key trends in AI research?")
         clear = gr.ClearButton([msg, chatbot])
 
-        # Link chat functionality
-        msg.submit(generate_rss_summary_ollama, 
-                   inputs=[cached_category_dropdown, msg, ollama_model_dropdown_rss, chatbot], 
+        msg.submit(generate_rss_summary_ollama,
+                   inputs=[cached_category_dropdown, msg, ollama_model_dropdown_rss, chatbot],
                    outputs=[chatbot, msg])
-        clear.click(lambda: ([], ""), inputs=None, outputs=[chatbot, msg]) # Clear chatbot to empty list, msg to empty string
-
+        clear.click(lambda: ([], ""), inputs=None, outputs=[chatbot, msg])
 
     # Link the "Fetch All Feeds" button to update all category tabs and the cached categories dropdown
     fetch_all_button.click(
-        update_all_feed_tabs,
+        update_all_feed_tabs_and_render_articles,
         inputs=[],
-        outputs=list(category_html_outputs.values()) # Pass all textbox components as outputs
+        # The outputs are now the dynamically generated content for each gr.Group
+        outputs=category_tab_content_blocks
     ).success(
-        list_cached_categories, # This function will update the choices AND value of cached_category_dropdown
+        list_cached_categories,
         inputs=[],
         outputs=[cached_category_dropdown]
     )
