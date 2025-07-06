@@ -1,20 +1,32 @@
+import csv
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
+import pandas as pd
+from io import StringIO, BytesIO
+import base64
 from typing import Dict, Any, List, Tuple, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass, asdict
 import gradio as gr
+import schedule
+import time
+import smtplib
+from email.mime.text import MIMEText
 import feedparser
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import ollama
+import threading
 import os
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup # Import BeautifulSoup for HTML cleaning
+
+# Import the ollama client library
+import ollama
 
 # --- New Imports for TTS ---
 import numpy as np
 import soundfile as sf
 
-# --- Data Structures ---
+# Data structures
 @dataclass
 class Article:
     title: str
@@ -22,7 +34,7 @@ class Article:
     published: str
     summary: str
     author: str = ""
-    feed_name: str = "" # Store the feed name with the article
+    feed_name: str = "" # Add feed_name to Article dataclass
 
 @dataclass
 class FeedData:
@@ -31,7 +43,7 @@ class FeedData:
     last_updated: str
     error: str = ""
 
-# RSS Feed Sources (as defined previously)
+# RSS Feed Sources - UPDATED WITH YOUR NEW LIST
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
         "Science Daily - AI":
@@ -98,7 +110,7 @@ RSS_FEEDS = {
         "Washington Post": "https://feeds.washingtonpost.com/rss/world",
         "Google News": "https://news.google.com/rss",
         "NPR": "https://feeds.npr.org/1001/rss.xml",
-        "CBS News": "https://www.cbsnews.com/latest/rss/main"
+        "CBS News": "https://www.cbscbsnews.com/latest/rss/main"
     },
 
     "🏈 SPORTS": {
@@ -162,7 +174,7 @@ RSS_FEEDS = {
     }
 }
 
-# Global cache for fetched articles
+# Global cache for fetched articles to enable chat functionality
 GLOBAL_ARTICLE_CACHE: Dict[str, List[Article]] = {}
 # Global variable to store available Ollama models
 OLLAMA_MODELS: List[str] = []
@@ -253,7 +265,8 @@ def karoko_tts_generate_audio(text: str, voice_name: str = DEFAULT_FEMALE_VOICE)
         sf.write(dummy_file_path, audio_data_np.astype(np.float32), sample_rate)
         return dummy_file_path
 
-# --- RSS Feed Functions ---
+
+# Core RSS functionality
 def fetch_rss_feed_single(url: str, feed_name: str, timeout: int = 10) -> FeedData:
     """Fetch and parse a single RSS feed."""
     try:
@@ -277,11 +290,13 @@ def fetch_rss_feed_single(url: str, feed_name: str, timeout: int = 10) -> FeedDa
 
         articles = []
         for entry in feed.entries:
+            # Keep full summary for Ollama and TTS, do not truncate here
+            full_summary = entry.get('summary', 'No summary available')
             article = Article(
                 title=entry.get('title', 'No title'),
                 link=entry.get('link', ''),
                 published=entry.get('published', 'Unknown date'),
-                summary=entry.get('summary', 'No summary available'), # Keep full summary for Ollama and TTS
+                summary=full_summary, # Store full summary
                 author=entry.get('author', 'Unknown author'),
                 feed_name=feed_name # Store the feed name with the article
             )
@@ -369,9 +384,11 @@ def update_all_feed_tabs_and_render_articles() -> Tuple[Any, ...]:
 
                     def get_sort_key(article):
                         try:
+                            # Try parsing with datetime first for more robust handling
                             return datetime.strptime(article.published, "%Y-%m-%d %H:%M:%S")
                         except ValueError:
                             try:
+                                # Fallback to feedparser's date parsing
                                 parsed_date = feedparser._parse_date(article.published)
                                 if parsed_date:
                                     return datetime(*parsed_date[:6])
@@ -379,18 +396,22 @@ def update_all_feed_tabs_and_render_articles() -> Tuple[Any, ...]:
                                 pass
                             return datetime.min
 
-                    display_articles = sorted(feed_data.articles, key=get_sort_key, reverse=True)[:5]
+                    # Sort all articles from this feed before displaying the top N
+                    sorted_feed_articles = sorted(feed_data.articles, key=get_sort_key, reverse=True)
+                    display_articles = sorted_feed_articles[:5] # Display top 5 articles per feed
 
                     for idx, article in enumerate(display_articles):
                         # Generate a unique ID for the audio player for this article
+                        # Ensure IDs are HTML-friendly (no spaces, special chars that aren't valid in ID)
                         article_unique_id = f"{category_name.replace(' ', '_').replace('&', 'and').lower()}_{feed_name.replace(' ', '_').replace('.', '').lower()}_article_{idx}"
 
-                        # Sanitize summary for HTML display
-                        clean_summary = BeautifulSoup(article.summary, 'html.parser').get_text().strip()
+                        # Sanitize summary for HTML display (truncating for display but full for TTS/LLM)
+                        clean_display_summary = BeautifulSoup(article.summary, 'html.parser').get_text().strip()
+                        # Truncate for display in HTML, but full summary is in article.summary for TTS/LLM
+                        display_summary_truncated = clean_display_summary[:300] + "..." if len(clean_display_summary) > 300 else clean_display_summary
 
-                        # Combine title and summary for TTS, then JSON dump for safe JS string
-                        # This is the corrected line to use json.dumps for the JavaScript string content directly.
-                        tts_content_for_js = json.dumps(article.title + ' ' + clean_summary)
+                        # Combine title and full summary for TTS, then JSON dump for safe JS string
+                        tts_content_for_js = json.dumps(article.title + ' ' + BeautifulSoup(article.summary, 'html.parser').get_text().strip())
 
                         # Build the HTML for each article
                         current_category_html += f"""
@@ -401,7 +422,7 @@ def update_all_feed_tabs_and_render_articles() -> Tuple[Any, ...]:
                                 <strong>Published:</strong> {article.published} |
                                 <strong>Author:</strong> {article.author}
                             </p>
-                            <p>{clean_summary}</p>
+                            <p>{display_summary_truncated}</p>
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <button
                                     class="read-aloud-button"
@@ -431,8 +452,7 @@ def list_cached_categories() -> gr.Dropdown:
     return gr.Dropdown(choices=current_cached_categories,
                       value=None) # Set initial value to None for clarity on refresh
 
-
-# --- Ollama Integration ---
+# Ollama Integration Functions
 def get_ollama_models() -> List[str]:
     """
     Fetches a list of available Ollama models.
@@ -455,15 +475,15 @@ def get_ollama_models() -> List[str]:
 
         if not model_list:
             print(f"[{datetime.now()}] No Ollama models found in the response. Have you pulled any yet? (e.g., 'ollama pull llama2')")
-            return ["No models found. Pull models like 'ollama pull gemma3n:e4b'."]
+            return ["No models found. Pull models like 'ollama pull gemma:2b'."]
 
         models = []
         for i, model_entry in enumerate(model_list):
-            if not hasattr(model_entry, 'model'):
-                print(f"[{datetime.now()}] Warning: Model entry at index {i} missing 'model' attribute. Skipping. Entry: {model_entry}")
+            if not hasattr(model_entry, 'name'): # Corrected from 'model' to 'name' as per ollama.list() output
+                print(f"[{datetime.now()}] Warning: Model entry at index {i} missing 'name' attribute. Skipping. Entry: {model_entry}")
                 continue
 
-            models.append(model_entry.model)
+            models.append(model_entry.name)
 
         if not models:
             print(f"[{datetime.now()}] No valid model names extracted after processing Ollama list response.")
@@ -472,7 +492,7 @@ def get_ollama_models() -> List[str]:
         return sorted(list(set(models)))
 
     except requests.exceptions.ConnectionError:
-        print(f"[{datetime.now()}] Error: Connection refused. Is Ollama server running on 127.0.0.1:11434 and accessible?")
+        print(f"[{datetime.now()}] Error: Connection refused. Is Ollama server running on 127.00.1:11434 and accessible?")
         return ["Error: Ollama Server Not Running or Connection Refused."]
     except Exception as e:
         print(f"[{datetime.now()}] An unexpected error occurred while fetching Ollama models: {e}")
@@ -512,7 +532,7 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
     # Prepare article data for the LLM prompt
     # Providing more detail to the LLM than just the preview
     articles_text = "\n\n---\n\n".join([
-        f"Title: {article.title}\nLink: {article.link}\nSource: {article.feed_name}\nPublished: {article.published}\nFull Summary: {article.summary}"
+        f"Title: {article.title}\nLink: {article.link}\nSource: {article.feed_name}\nPublished: {article.published}\nFull Summary: {BeautifulSoup(article.summary, 'html.parser').get_text().strip()}"
         for article in articles_to_summarize
     ])
 
@@ -536,6 +556,7 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
     # Chatbot history in Gradio is a list of lists: [[user_msg, ai_msg], ...]
     for human_msg, ai_msg in chat_history:
         messages.append({'role': 'user', 'content': human_msg})
+        messages.append({'role': 'assistant', 'content': ai_msg}) # Include AI's previous responses too
     messages.append({'role': 'user', 'content': user_query}) # Only add current user query, context is built dynamically
     # The response will be appended after the ollama.chat call
 
@@ -551,33 +572,21 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
         chat_history.append([user_query, error_message])
         return chat_history, "" # Clear the textbox after sending
 
-# --- Gradio Interface ---
 
-with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
-    gr.Markdown("# Advanced RSS Feed Viewer & AI Assistant")
+# Main application
+def create_enhanced_rss_viewer():
+    """Create the main RSS viewer application."""
 
-    # Define a list to hold the gr.HTML components for each tab's content.
-    category_html_outputs: Dict[str, gr.HTML] = {}
+    with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant", theme=gr.themes.Soft()) as app:
+        gr.Markdown("# 📰 Advanced RSS Feed Viewer & AI Assistant")
+        gr.Markdown("Monitor and view RSS feeds from various sources with integrated Text-to-Speech and local Ollama LLM chat.")
 
-    with gr.Tab("RSS Feed Browser"):
-        gr.Markdown("## Latest News Across Categories")
-        fetch_all_button = gr.Button("Fetch All Feeds (This may take a moment)")
-
-        # Create a hidden Gradio Audio component to be the target for TTS
-        # This will be shared by all dynamic HTML buttons
+        # Shared TTS components
         hidden_audio_output = gr.Audio(visible=False, interactive=False, label="TTS Output")
-
-        # Create a dummy Textbox that will receive the article text from JS,
-        # which can then be passed to the TTS function. This is just an input
-        # placeholder for the Python function called by JS.
         hidden_article_text_input = gr.Textbox(visible=False, interactive=False)
         hidden_voice_input = gr.Textbox(visible=False, interactive=False)
 
-        # This function acts as a proxy that JavaScript calls.
-        # It takes the article text and voice ID from JavaScript.
-        # It then calls your actual Karoko TTS function.
-        # It needs to return a Gradio Audio component (or a file path for it).
-        # This function is defined *inside* the Blocks context.
+        # TTS JavaScript proxy function
         read_aloud_js_proxy_function = gr.Function(
             karoko_tts_generate_audio,
             inputs=[hidden_article_text_input, hidden_voice_input],
@@ -625,54 +634,115 @@ with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
             </script>
         """)
 
+        # Store all category HTML outputs to update them via the "Fetch All Feeds" button
+        category_html_outputs_map = {category_name: None for category_name in RSS_FEEDS.keys()}
 
-        with gr.Tabs() as category_tabs:
-            for category_name in RSS_FEEDS.keys():
-                with gr.Tab(category_name, id=f"tab_{category_name.replace(' ', '_').replace('&', 'and').lower()}"):
-                    # Use gr.HTML to display the dynamically generated content for each tab
-                    # Initial value is a loading message
-                    category_html_outputs[category_name] = gr.HTML(
-                        value="<p>Click 'Fetch All Feeds' to load articles...</p>",
-                        elem_id=f"html_output_{category_name.replace(' ', '_').replace('&', 'and').lower()}"
+
+        with gr.Tabs() as main_tabs:
+            with gr.TabItem("RSS Feed Browser"):
+                gr.Markdown("## Latest News Across Categories")
+                fetch_all_button = gr.Button("Fetch All Feeds (This may take a moment to load all data)", variant="primary")
+
+                with gr.Tabs() as category_tabs:
+                    for category_name in RSS_FEEDS.keys():
+                        with gr.Tab(category_name, id=f"tab_{category_name.replace(' ', '_').replace('&', 'and').lower()}"):
+                            # Using gr.HTML to display the dynamically generated content
+                            # Initial value is a loading message or will be updated on fetch_all_button click
+                            category_html_outputs_map[category_name] = gr.HTML(
+                                value="<p>Click 'Fetch All Feeds' to load articles...</p>",
+                                elem_id=f"html_output_{category_name.replace(' ', '_').replace('&', 'and').lower()}"
+                            )
+
+            # New "Chat with RSS Feeds" Tab
+            with gr.TabItem("💬 Chat with RSS Feeds"):
+                gr.Markdown("### Ask questions about the loaded RSS feeds!")
+                gr.Markdown("First, click 'Fetch All Feeds' on the 'RSS Feed Browser' tab to cache articles. Then select a category here to chat about its content.")
+
+                with gr.Row():
+                    chat_category_select = gr.Dropdown(
+                        choices=list(RSS_FEEDS.keys()),
+                        label="Select Category for Chat (Articles from this category will be used as context)",
+                        interactive=True,
+                        value=list(RSS_FEEDS.keys())[0] if RSS_FEEDS else None,
+                        scale=1
                     )
+                    ollama_model_dropdown = gr.Dropdown(
+                        choices=ollama_available_models,
+                        label="Select Ollama Model",
+                        interactive=True,
+                        value=default_ollama_model,
+                        scale=1
+                    )
+                    refresh_models_btn = gr.Button("Refresh Models", scale=0)
 
-    with gr.Tab("AI News Insights"):
-        gr.Markdown("## Get AI Insights from Fetched RSS Articles")
-        with gr.Row():
-            ollama_model_dropdown_rss = gr.Dropdown(
-                label="Select Ollama Model",
-                choices=ollama_available_models,
-                value=default_ollama_model,
-                interactive=True
-            )
-            cached_category_dropdown = gr.Dropdown(
-                label="Select Cached Category for Insights",
-                choices=list(RSS_FEEDS.keys()),
-                value=None,
-                interactive=True
-            )
+                chatbot = gr.Chatbot(label="RSS Chat", height=400)
+                msg = gr.Textbox(label="Your Question", placeholder="e.g., What are the latest AI advancements?", container=False)
+                clear = gr.Button("Clear Chat")
 
-        chatbot = gr.Chatbot(label="Ollama Chat History", height=300, type="messages")
-        msg = gr.Textbox(label="Ask a question about the articles:", placeholder="e.g., What are the key trends in AI research?")
-        clear = gr.ClearButton([msg, chatbot])
+                msg.submit(
+                    generate_rss_summary_ollama,
+                    [chat_category_select, msg, ollama_model_dropdown, chatbot],
+                    [chatbot, msg]
+                )
+                clear.click(lambda: ([], ""), inputs=None, outputs=[chatbot, msg], queue=False)
 
-        msg.submit(generate_rss_summary_ollama,
-                   inputs=[cached_category_dropdown, msg, ollama_model_dropdown_rss, chatbot],
-                   outputs=[chatbot, msg])
-        clear.click(lambda: ([], ""), inputs=None, outputs=[chatbot, msg])
+                refresh_models_btn.click(
+                    fn=get_ollama_models,
+                    outputs=ollama_model_dropdown
+                )
 
-    # Link the "Fetch All Feeds" button to update all category tabs and the cached categories dropdown
-    fetch_all_button.click(
-        update_all_feed_tabs_and_render_articles,
-        inputs=[],
-        # The outputs are now the gr.HTML components
-        outputs=list(category_html_outputs.values())
-    ).success(
-        list_cached_categories,
-        inputs=[],
-        outputs=[cached_category_dropdown]
-    )
+            # Settings Tab
+            with gr.TabItem("⚙️ Settings"):
+                gr.Markdown("### Application Settings")
 
-# Launch the Gradio app
+                with gr.Row():
+                    with gr.Column():
+                        gr.Markdown("#### Feed Sources")
+                        feed_count = sum(len(feeds) for feeds in RSS_FEEDS.values())
+                        gr.Markdown(f"**Total Categories:** {len(RSS_FEEDS)}")
+                        gr.Markdown(f"**Total Feeds:** {feed_count}")
+
+                        for category, feeds in RSS_FEEDS.items():
+                            gr.Markdown(f"**{category}:** {len(feeds)} feeds")
+
+                    with gr.Column():
+                        gr.Markdown("#### System Info")
+                        gr.Markdown(f"**Last Started:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                        gr.Markdown("**Status:** Running")
+                        gr.Markdown("**Version:** 1.0.0")
+                        gr.Markdown("---")
+                        gr.Markdown("#### Ollama Status")
+                        ollama_status_display = gr.HTML(label="Ollama Server Status")
+
+                # Function to check Ollama status
+                def check_ollama_status():
+                    try:
+                        models = ollama.list()
+                        num_models = len(models.get('models', []))
+                        return f"<p style='color: green;'>✅ Ollama Server is Running!</p><p>Available Models: {num_models}</p>"
+                    except Exception as e:
+                        return f"<p style='color: red;'>❌ Ollama Server Not Reachable. Error: {e}</p><p>Please ensure Ollama is installed and running (`ollama serve`).</p>"
+
+                app.load(
+                    fn=check_ollama_status,
+                    outputs=ollama_status_display
+                )
+
+        # Link the "Fetch All Feeds" button to update all category tabs and the cached categories dropdown
+        fetch_all_button.click(
+            update_all_feed_tabs_and_render_articles,
+            inputs=[],
+            # The outputs are now the gr.HTML components from the map
+            outputs=list(category_html_outputs_map.values())
+        ).success(
+            list_cached_categories,
+            inputs=[],
+            outputs=[chat_category_select]
+        )
+
+    return app
+
+# To run the Gradio app:
 if __name__ == "__main__":
-    demo.launch(share=False)
+    app = create_enhanced_rss_viewer()
+    app.launch(share=False)
