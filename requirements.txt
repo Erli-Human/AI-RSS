@@ -7,3 +7,5 @@ pandas==2.1.4
 schedule>=1.2.0
 ollama
 beautifulsoup4
+numpy==1.26.4
+soundfile==0.12.1
