@@ -12,8 +12,7 @@ from bs4 import BeautifulSoup
 
 # --- New Imports for TTS ---
 import numpy as np
-import soundfile as sf # To save audio, as Karoko might output directly or need a save
-# import torch # Often needed for Karoko/Kokoro TTS models, include if your setup requires it
+import soundfile as sf
 
 # --- Data Structures ---
 @dataclass
@@ -338,90 +337,33 @@ def fetch_all_feeds_parallel() -> Dict[str, Dict[str, FeedData]]:
             all_results[category] = category_results
     return all_results
 
-def get_article_display_components(article: Article, preview_lines: int = 4) -> Tuple[str, gr.Button, gr.Dropdown, gr.Audio]:
-    """
-    Generates the Gradio components (Markdown string, Button, Dropdown, Audio)
-    for displaying a single article with its read-aloud functionality.
-    """
-    # Ensure no HTML tags in the summary for plain text display and truncate
-    clean_summary = BeautifulSoup(article.summary, 'html.parser').get_text().strip()
-
-    # Use Markdown for clickable link
-    title_line = f"**[{article.title}]({article.link})**"
-
-    # Clearly identify the feed name, published date, and author
-    info_line = f"**Feed:** {article.feed_name} | **Published:** {article.published} | **Author:** {article.author}"
-
-    # Truncate summary to the desired number of lines
-    summary_lines = []
-    current_line = ""
-    words = clean_summary.split()
-
-    for word in words:
-        if not current_line:
-            current_line = word
-        elif len(current_line) + 1 + len(word) <= 90: # Approximate characters per line
-            current_line += " " + word
-        else:
-            summary_lines.append(current_line)
-            current_line = word
-            if len(summary_lines) >= preview_lines:
-                break
-
-    if current_line and len(summary_lines) < preview_lines:
-        summary_lines.append(current_line)
-
-    summary_preview = "\n".join(summary_lines)
-
-    # Add ellipsis if the original summary was longer than the preview
-    if clean_summary and len(summary_preview.replace("\n", " ")) < len(clean_summary):
-        summary_preview += "..."
-
-    article_markdown = f"{title_line}\n{info_line}\nSummary: {summary_preview}"
-
-    # Create components for each article
-    read_aloud_button = gr.Button("Read Aloud 🔊", interactive=True)
-    voice_selector = gr.Dropdown(
-        choices=FEMALE_VOICES,
-        value=DEFAULT_FEMALE_VOICE,
-        label="Select Voice",
-        interactive=True,
-        scale=0 # Shrink dropdown to fit
-    )
-    audio_output = gr.Audio(label="Listen Here", autoplay=False, show_label=False)
-
-    return article_markdown, read_aloud_button, voice_selector, audio_output
-
-
+# This function now generates HTML string for each category
 def update_all_feed_tabs_and_render_articles() -> Tuple[Any, ...]:
     """
-    Fetches all feeds, updates the global cache, and prepares the Gradio output
-    for each category tab, including dynamically created article blocks.
-    Returns a tuple of Gradio component updates for each category.
+    Fetches all feeds, updates the global cache, and generates HTML strings
+    for each category tab, including dynamically created article blocks with
+    read-aloud buttons (via JavaScript calls).
+    Returns a tuple of HTML strings, one for each category.
     """
     global GLOBAL_ARTICLE_CACHE
     all_feed_data_by_category = fetch_all_feeds_parallel()
 
-    # This list will hold the Gradio components for all tabs.
-    # Each item will be a list of lists of components for a specific tab.
-    all_tab_content_updates = []
+    all_tab_html_outputs: List[str] = []
 
     for category_name in RSS_FEEDS.keys():
         category_articles_for_cache: List[Article] = []
-        # This will hold the dynamic UI elements for the current tab
-        current_tab_ui_elements: List[gr.Blocks] = []
+        current_category_html = ""
 
         category_feeds = all_feed_data_by_category.get(category_name, {})
 
         if not category_feeds:
-            # If no feeds for this category, display a message
-            current_tab_ui_elements.append(gr.Markdown(f"No feeds configured or found for {category_name}."))
+            current_category_html += f"<div>No feeds configured or found for {category_name}.</div>"
         else:
             for feed_name, feed_data in category_feeds.items():
                 if feed_data.status == "error":
-                    current_tab_ui_elements.append(gr.Markdown(f"**{feed_name}**: Error: {feed_data.error}\n\n"))
+                    current_category_html += f"<div><strong>{feed_name}</strong>: Error: {feed_data.error}</div><br>"
                 elif not feed_data.articles:
-                    current_tab_ui_elements.append(gr.Markdown(f"**{feed_name}**: No articles found.\n\n"))
+                    current_category_html += f"<div><strong>{feed_name}</strong>: No articles found.</div><br>"
                 else:
                     category_articles_for_cache.extend(feed_data.articles)
 
@@ -439,41 +381,43 @@ def update_all_feed_tabs_and_render_articles() -> Tuple[Any, ...]:
 
                     display_articles = sorted(feed_data.articles, key=get_sort_key, reverse=True)[:5]
 
-                    for article in display_articles:
-                        with gr.Column(scale=1): # Use a column for each article block
-                            # Prepare article content
-                            article_markdown_str = f"### {article.title}\n" \
-                                                   f"**Source:** {article.feed_name} | **Published:** {article.published} | **Author:** {article.author}\n" \
-                                                   f"**Link:** [{article.link}]({article.link})\n" \
-                                                   f"{BeautifulSoup(article.summary, 'html.parser').get_text().strip()}"
+                    for idx, article in enumerate(display_articles):
+                        # Generate a unique ID for the audio player for this article
+                        article_unique_id = f"{category_name.replace(' ', '_').replace('&', 'and').lower()}_{feed_name.replace(' ', '_').replace('.', '').lower()}_article_{idx}"
 
-                            # Create Gradio components for the article
-                            article_text_display = gr.Markdown(article_markdown_str)
-                            with gr.Row():
-                                read_aloud_button = gr.Button("Read Aloud 🔊", interactive=True)
-                                voice_selector = gr.Dropdown(
-                                    choices=FEMALE_VOICES,
-                                    value=DEFAULT_FEMALE_VOICE,
-                                    label="Select Voice",
-                                    interactive=True,
-                                    scale=0 # Shrink dropdown
-                                )
-                            audio_output = gr.Audio(label="Listen Here", autoplay=False, show_label=False)
+                        # Sanitize summary for HTML display
+                        clean_summary = BeautifulSoup(article.summary, 'html.parser').get_text().strip()
 
-                            # Link the read-aloud functionality
-                            read_aloud_button.click(
-                                fn=karoko_tts_generate_audio,
-                                inputs=[article_text_display, voice_selector],
-                                outputs=audio_output
-                            )
-                            current_tab_ui_elements.append(gr.HTML("<hr>")) # Separator
-
+                        # Build the HTML for each article
+                        current_category_html += f"""
+                        <div style="border: 1px solid #eee; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
+                            <h3><a href="{article.link}" target="_blank" style="text-decoration: none; color: var(--link-text-color, #1F8BCA);">{article.title}</a></h3>
+                            <p style="font-size: 0.9em; color: #666;">
+                                <strong>Feed:</strong> {article.feed_name} |
+                                <strong>Published:</strong> {article.published} |
+                                <strong>Author:</strong> {article.author}
+                            </p>
+                            <p>{clean_summary}</p>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <button
+                                    class="read-aloud-button"
+                                    onclick="readAloudArticle('{article_unique_id}', '{article.title + ' ' + clean_summary.replace("'", "\\'").replace('"', '&quot;')}')"
+                                    style="padding: 8px 12px; cursor: pointer; background-color: var(--button-primary-background-color); color: var(--button-primary-text-color); border: none; border-radius: 4px;"
+                                >
+                                    Read Aloud 🔊
+                                </button>
+                                <select id="voice-selector-{article_unique_id}" style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
+                                    {''.join([f'<option value="{v}" {"selected" if v == DEFAULT_FEMALE_VOICE else ""}>{v}</option>' for v in FEMALE_VOICES])}
+                                </select>
+                            </div>
+                            <audio id="audio-player-{article_unique_id}" controls style="width: 100%; margin-top: 10px;"></audio>
+                        </div>
+                        <hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));">
+                        """
         GLOBAL_ARTICLE_CACHE[category_name] = category_articles_for_cache
-        all_tab_content_updates.append(current_tab_ui_elements)
+        all_tab_html_outputs.append(current_category_html)
 
-    # Return a tuple of component lists for each tab.
-    # Gradio will then update the content of each gr.Group based on this.
-    return tuple(all_tab_content_updates)
+    return tuple(all_tab_html_outputs)
 
 
 def list_cached_categories() -> gr.Dropdown:
@@ -608,26 +552,85 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
 with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
     gr.Markdown("# Advanced RSS Feed Viewer & AI Assistant")
 
-    # Define a list to hold the dynamic content blocks for each tab.
-    # We will populate this list after the `gr.Blocks` context manager.
-    category_tab_content_blocks: List[gr.Group] = []
+    # Define a list to hold the gr.HTML components for each tab's content.
+    category_html_outputs: Dict[str, gr.HTML] = {}
 
     with gr.Tab("RSS Feed Browser"):
         gr.Markdown("## Latest News Across Categories")
         fetch_all_button = gr.Button("Fetch All Feeds (This may take a moment)")
 
+        # Create a hidden Gradio Audio component to be the target for TTS
+        # This will be shared by all dynamic HTML buttons
+        hidden_audio_output = gr.Audio(visible=False, interactive=False, label="TTS Output")
+
+        # Create a dummy Textbox that will receive the article text from JS,
+        # which can then be passed to the TTS function. This is just an input
+        # placeholder for the Python function called by JS.
+        hidden_article_text_input = gr.Textbox(visible=False, interactive=False)
+        hidden_voice_input = gr.Textbox(visible=False, interactive=False)
+
+        # This function acts as a proxy that JavaScript calls.
+        # It takes the article text and voice ID from JavaScript.
+        # It then calls your actual Karoko TTS function.
+        # It needs to return a Gradio Audio component (or a file path for it).
+        # This function is defined *inside* the Blocks context.
+        read_aloud_js_proxy_function = gr.Function(
+            karoko_tts_generate_audio,
+            inputs=[hidden_article_text_input, hidden_voice_input],
+            outputs=[hidden_audio_output],
+            api_name="read_aloud_api" # Give it an API name to call from JS
+        )
+
+        gr.Markdown("""
+            <script>
+            // JavaScript function to call the Gradio Python function for TTS
+            async function readAloudArticle(article_id, article_content) {
+                const voiceSelector = document.getElementById(`voice-selector-${article_id}`);
+                const selectedVoice = voiceSelector ? voiceSelector.value : 'female_default'; // Get selected voice
+                const audioPlayer = document.getElementById(`audio-player-${article_id}`);
+
+                if (audioPlayer) {
+                    audioPlayer.src = ''; // Clear previous audio
+                    audioPlayer.pause();
+                    audioPlayer.load();
+                }
+
+                // Call the Gradio API function
+                // The `window.gradio_config.root` is needed to get the base URL if app is proxied.
+                const response = await fetch(`${window.gradio_config.root}/run/read_aloud_api`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        data: [
+                            article_content, // maps to hidden_article_text_input
+                            selectedVoice    // maps to hidden_voice_input
+                        ]
+                    })
+                });
+
+                const jsonResponse = await response.json();
+                const audioFilePath = jsonResponse.data[0].url; // Get the URL from Gradio's response
+
+                if (audioPlayer && audioFilePath) {
+                    audioPlayer.src = audioFilePath;
+                    audioPlayer.play();
+                } else {
+                    console.error('Failed to get audio file path or audio player not found:', audioFilePath);
+                }
+            }
+            </script>
+        """)
+
+
         with gr.Tabs() as category_tabs:
             for category_name in RSS_FEEDS.keys():
                 with gr.Tab(category_name, id=f"tab_{category_name.replace(' ', '_').replace('&', 'and').lower()}"):
-                    # Create a gr.Group for each tab's content.
-                    # This group will be updated dynamically after fetch.
-                    # We store these group components in a list to reference later.
-                    category_group = gr.Group()
-                    category_tab_content_blocks.append(category_group)
-                    # Initial content for the group
-                    with category_group:
-                        gr.Markdown("Click 'Fetch All Feeds' to load articles...")
-
+                    # Use gr.HTML to display the dynamically generated content for each tab
+                    # Initial value is a loading message
+                    category_html_outputs[category_name] = gr.HTML(
+                        value="<p>Click 'Fetch All Feeds' to load articles...</p>",
+                        elem_id=f"html_output_{category_name.replace(' ', '_').replace('&', 'and').lower()}"
+                    )
 
     with gr.Tab("AI News Insights"):
         gr.Markdown("## Get AI Insights from Fetched RSS Articles")
@@ -658,8 +661,8 @@ with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
     fetch_all_button.click(
         update_all_feed_tabs_and_render_articles,
         inputs=[],
-        # The outputs are now the dynamically generated content for each gr.Group
-        outputs=category_tab_content_blocks
+        # The outputs are now the gr.HTML components
+        outputs=list(category_html_outputs.values())
     ).success(
         list_cached_categories,
         inputs=[],
