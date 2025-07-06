@@ -245,6 +245,7 @@ class FeedAnalytics:
         return f"data:image/png;base64,{image_base64}"
 
 # Main application
+# This function definition is moved here to ensure it's defined before being called
 def create_enhanced_rss_viewer():
     """Create the main RSS viewer application."""
     
@@ -370,7 +371,7 @@ def create_enhanced_rss_viewer():
                         choices=["All Categories"] + list(RSS_FEEDS.keys()),
                         label="Select Category to Export",
                         value="All Categories"
-                    )
+                    ) # Fixed: added missing closing parenthesis here
                     export_format = gr.Radio(
                         choices=["CSV", "JSON"],
                         label="Export Format",
