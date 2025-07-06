@@ -39,7 +39,7 @@ RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
         "Science Daily - AI":   
         "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
-        "Science Daily - Technology": 
+        "Science Daily - Technology":  
         "https://www.sciencedaily.com/rss/top/technology.xml",
         "OpenAI Blog": "https://openai.com/blog/rss.xml",
         "DeepMind Blog": "https://deepmind.com/blog/feed/basic/",
@@ -195,7 +195,7 @@ def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
             )
         
         articles = []
-        for entry in feed.entries:  # Keep all articles for the chat/search cache
+        for entry in feed.entries:
             article = Article(
                 title=entry.get('title', 'No title'),
                 link=entry.get('link', ''),
@@ -274,10 +274,31 @@ def create_enhanced_rss_viewer():
             if not articles:
                 html += "<p>No articles available for this feed.</p>"
             else:
-                # Removed the sorting of articles
+                # Re-introducing sorting with a robust date parsing
+                # This helps ensure the 'top N' articles are truly the latest.
+                def get_published_date(article):
+                    try:
+                        # Attempt to parse common RSS date formats using feedparser's internal methods
+                        parsed_date = feedparser._parse_date_rfc822(article.published)
+                        if parsed_date is None:
+                            parsed_date = feedparser._parse_date_iso8601(article.published)
+                        
+                        if parsed_date is not None:
+                            # Convert time.struct_time to datetime object for comparison
+                            return datetime(*parsed_date[:6]) 
+                        else:
+                            # Fallback for unparseable dates: treat as very old
+                            return datetime.min
+                    except Exception:
+                        # Catch any other parsing errors and treat as very old
+                        return datetime.min
+                
+                # Sort articles by published date (most recent first)
+                articles.sort(key=get_published_date, reverse=True)
+                
                 displayed_articles = articles[:num_articles_per_feed]
 
-                for article in displayed_articles: # Take only the top N (now unsorted)
+                for article in displayed_articles:
                     html += f"""
                     <div style='border: 1px solid #eee; margin: 10px 0; padding: 10px; border-radius: 5px; background-color: #fff;'>
                         <h4><a href='{article.link}' target='_blank' style='color: #2196F3; text-decoration: none;'>{article.title}</a></h4>
@@ -522,7 +543,7 @@ RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
         "Science Daily - AI":   
         "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
-        "Science Daily - Technology": 
+        "Science Daily - Technology":  
         "https://www.sciencedaily.com/rss/top/technology.xml",
         "Sam Altman Blog": "https://blog.samaltman.com/",
         "O'Reilly Radar": "https://feeds.feedburner.com/oreilly-radar",
