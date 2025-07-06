@@ -52,7 +52,6 @@ RSS_FEEDS = {
         "Berkeley AI Research": "https://bair.berkeley.edu/blog/feed.xml",
         "Distill": "https://distill.pub/rss.xml",
         "AI News": "https://www.artificialintelligence-news.com/feed/",
-        "VentureBeat AI": "https://venturebeat.com/ai/feed/",
         "MIT Technology Review": "https://www.technologyreview.com/feed/",
         "IEEE Spectrum": "https://spectrum.ieee.org/rss/fulltext"
     },
