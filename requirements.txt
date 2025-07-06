@@ -2,6 +2,5 @@ gradio>=4.0.0
 feedparser>=6.0.10
 requests>=2.31.0
 python-dateutil>=2.8.2
-sqlite3
 matplotlib==3.8.2
 pandas==2.1.4
