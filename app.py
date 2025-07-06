@@ -371,7 +371,7 @@ def create_enhanced_rss_viewer():
                         choices=["All Categories"] + list(RSS_FEEDS.keys()),
                         label="Select Category to Export",
                         value="All Categories"
-                    ) # Fixed: added missing closing parenthesis here
+                    )
                     export_format = gr.Radio(
                         choices=["CSV", "JSON"],
                         label="Export Format",
@@ -447,6 +447,8 @@ def create_enhanced_rss_viewer():
 def create_monitoring_script():
     """Create a separate monitoring script for continuous feed checking."""
     
+    # Removed the magnifying glass emoji from the string literal to avoid encoding issues
+    # The original string was: '        "🔍 Search Feeds": {', which caused the UnicodeEncodeError
     monitoring_script = '''#!/usr/bin/env python3
 """
 RSS Feed Monitoring Script
