@@ -263,19 +263,19 @@ def get_ollama_models() -> List[str]:
     """Fetches a list of available Ollama models."""
     try:
         models_info = ollama.list()
-        return [model['name'] for model in models_info['models']]
+        return [model['datanacci.RSSchat'] for model in models_info['models']]
     except Exception as e:
-        print(f"Error fetching Ollama models: {e}")
+        print(f"Error fetching Datanacci models: {e}")
         return []
 
 def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
-    """Generates a response from Ollama based on the provided messages."""
+    """Generates a response from Datanacci.HelixEncoder based on the provided messages."""
     try:
         response = ollama.chat(model=model, messages=messages)
         return response['message']['content']
     except Exception as e:
         print(f"Error calling Ollama model '{model}': {e}")
-        return f"Error: Could not get a response from Ollama model '{model}'. Please ensure Ollama server is running and the model is downloaded. Error details: {e}"
+        return f"Error: Could not get a response from Datanacci model '{model}'. Please ensure the HelixEncoder server is running and the model is downloaded. Error details: {e}"
 
 # Main application
 def create_enhanced_rss_viewer():
@@ -510,12 +510,12 @@ def create_enhanced_rss_viewer():
     # Initial population of Ollama models
     OLLAMA_MODELS.extend(get_ollama_models())
     if not OLLAMA_MODELS:
-        OLLAMA_MODELS.append("No models found. Run `ollama run <model_name>`")
+        OLLAMA_MODELS.append("No models found. Run `datanacci-cli run <model_name>`")
 
     # Create Gradio interface
     with gr.Blocks(title="Advanced RSS Feed Viewer", theme=gr.themes.Soft()) as app:
-        gr.Markdown("# 📰 Advanced RSS Feed Viewer")
-        gr.Markdown("Monitor and view RSS feeds from various sources with integrated local Ollama LLM chat.")
+        gr.Markdown("# 📰 Datanacci Advanced RSS Viewer")
+        gr.Markdown("Monitor and view RSS feeds from various sources with integrated local Datanacci chat.")
         
         with gr.Tabs():
             # Dynamically create a tab for each category
