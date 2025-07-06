@@ -388,6 +388,9 @@ def update_all_feed_tabs_and_render_articles() -> Tuple[Any, ...]:
                         # Sanitize summary for HTML display
                         clean_summary = BeautifulSoup(article.summary, 'html.parser').get_text().strip()
 
+                        # Combine title and summary for TTS, then JSON dump for safe JS string
+                        tts_content = json.dumps(article.title + ' ' + clean_summary)
+
                         # Build the HTML for each article
                         current_category_html += f"""
                         <div style="border: 1px solid #eee; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
@@ -401,7 +404,7 @@ def update_all_feed_tabs_and_render_articles() -> Tuple[Any, ...]:
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <button
                                     class="read-aloud-button"
-                                    onclick="readAloudArticle('{article_unique_id}', '{article.title + ' ' + clean_summary.replace("'", "\\'").replace('"', '&quot;')}')"
+                                    onclick="readAloudArticle('{article_unique_id}', {tts_content})"
                                     style="padding: 8px 12px; cursor: pointer; background-color: var(--button-primary-background-color); color: var(--button-primary-text-color); border: none; border-radius: 4px;"
                                 >
                                     Read Aloud 🔊
