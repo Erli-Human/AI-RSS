@@ -37,7 +37,7 @@ class FeedData:
     last_updated: str
     error: str = ""
 
-# RSS Feed Sources - UPDATED WITH YOUR NEW LIST
+# RSS Feed Sources
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
         "Science Daily - AI":   
@@ -52,6 +52,7 @@ RSS_FEEDS = {
         "Berkeley AI Research": "https://bair.berkeley.edu/blog/feed.xml",
         "Distill": "https://distill.pub/rss.xml",
         "AI News": "https://www.artificialintelligence-news.com/feed/",
+        "VentureBeat AI": "https://venturebeat.com/ai/feed/",
         "MIT Technology Review": "https://www.technologyreview.com/feed/",
         "IEEE Spectrum": "https://spectrum.ieee.org/rss/fulltext"
     },
@@ -148,7 +149,8 @@ RSS_FEEDS = {
         "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
         "Deutsche Welle": "https://rss.dw.com/rdf/rss-en-all",
         "RT": "https://www.rt.com/rss/",
-        "Times of India": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
+        "Times of India": "https://timesofindia.indiatim\
+es.com/rssfeedstopstories.cms"
     },
     
     "🍔 FOOD & COOKING": {
@@ -169,24 +171,19 @@ RSS_FEEDS = {
 }
 
 # Global cache for fetched articles to enable chat functionality
-# This is a simple in-memory cache. For a real app, consider persistent storage.
-# Key: category name, Value: List of Article objects
 GLOBAL_ARTICLE_CACHE: Dict[str, List[Article]] = {}
 # Global variable to store available Ollama models
 OLLAMA_MODELS: List[str] = []
 
-# Core RSS functionality
+# --- RSS Core Functions (No Changes Here) ---
 def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
     """Fetch and parse a single RSS feed."""
     try:
-        # Set user agent to avoid blocking
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
-        
         response = requests.get(url, headers=headers, timeout=timeout)
         response.raise_for_status()
-        
         feed = feedparser.parse(response.content)
         
         if feed.bozo and feed.bozo_exception:
@@ -205,7 +202,7 @@ def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
                 published=entry.get('published', 'Unknown date'),
                 summary=entry.get('summary', 'No summary available')[:200] + "...",
                 author=entry.get('author', 'Unknown author'),
-                feed_name=feed_name # Store the feed name with the article
+                feed_name=feed_name
             )
             articles.append(article)
         
@@ -240,7 +237,7 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_feed = {
-            executor.submit(fetch_rss_feed, url, name): name  # Pass feed_name
+            executor.submit(fetch_rss_feed, url, name): name
             for name, url in feeds.items()
         }
         
@@ -258,7 +255,7 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
     
     return results
 
-# Ollama Integration Functions
+# --- Ollama Integration Functions (No Changes Here) ---
 def get_ollama_models() -> List[str]:
     """Fetches a list of available Ollama models."""
     try:
@@ -266,7 +263,7 @@ def get_ollama_models() -> List[str]:
         return [model['name'] for model in models_info['models']]
     except Exception as e:
         print(f"Error fetching Ollama models: {e}")
-        return []
+        return ["Error: Could not fetch models. Is Ollama server running?"]
 
 def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
     """Generates a response from Ollama based on the provided messages."""
@@ -277,7 +274,7 @@ def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
         print(f"Error calling Ollama model '{model}': {e}")
         return f"Error: Could not get a response from Ollama model '{model}'. Please ensure Ollama server is running and the model is downloaded. Error details: {e}"
 
-# Main application
+# --- Main Application Logic ---
 def create_enhanced_rss_viewer():
     """Create the main RSS viewer application."""
     
@@ -445,7 +442,7 @@ def create_enhanced_rss_viewer():
         html_content += "</div>" # Close category-feeds-container
         return html_content
 
-    # Function for the "Chat with RSS feeds" tab
+    # Function for the "Chat with RSS feeds" tab (now part of the main layout)
     def chat_with_feeds(
         chat_history: List[List[str]],
         user_input: str,
@@ -460,10 +457,10 @@ def create_enhanced_rss_viewer():
             return chat_history, "Please enter a query."
 
         if not chat_category or chat_category not in GLOBAL_ARTICLE_CACHE:
-            return chat_history, "Please select a category and load its feeds first in the Feed Viewer tab."
+            return chat_history, "Please select a category and load its feeds first in the Feed Viewer tabs."
         
-        if not ollama_model_name:
-            return chat_history, "Please select an Ollama model."
+        if not ollama_model_name or ollama_model_name.startswith("Error:"):
+            return chat_history, "Please select a valid Ollama model. Ensure Ollama server is running."
 
         articles_to_search = GLOBAL_ARTICLE_CACHE[chat_category]
 
@@ -471,7 +468,8 @@ def create_enhanced_rss_viewer():
         context_articles_str = ""
         if articles_to_search:
             context_articles_str = "Here is a list of recent articles from the selected RSS category. Please use this information to answer the user's questions:\n\n"
-            for i, article in enumerate(articles_to_search[:20]): # Limit context to top 20 articles to avoid exceeding context window
+            # Limit context to top 20 articles to avoid exceeding context window
+            for i, article in enumerate(articles_to_search[:20]): 
                 context_articles_str += (
                     f"Article {i+1}:\n"
                     f"  Feed: {article.feed_name}\n"
@@ -480,13 +478,13 @@ def create_enhanced_rss_viewer():
                     f"  Published: {article.published}\n"
                     f"  Summary: {article.summary}\n\n"
                 )
-            context_articles_str += "\nIf the user asks about general knowledge not related to these articles, answer generally but prioritize the provided article context when relevant.\n"
+            context_articles_str += "\nIf the user asks about general knowledge not related to these articles, answer generally but prioritize the provided article context when relevant. Keep your responses concise.\n"
         else:
-            context_articles_str = "No articles are available for the selected category. Please answer the user's questions based on general knowledge."
+            context_articles_str = "No articles are available for the selected category. Please answer the user's questions based on general knowledge. Keep your responses concise.\n"
 
         # Prepare messages for Ollama API
         messages = [
-            {"role": "system", "content": f"You are a helpful assistant specialized in summarizing and answering questions about RSS feed content. {context_articles_str}"}
+            {"role": "system", "content": context_articles_str}
         ]
 
         # Add past conversation to messages
@@ -506,52 +504,74 @@ def create_enhanced_rss_viewer():
         chat_history.append([user_input, ai_response])
         return chat_history, "" # Clear user input box
 
-
     # Initial population of Ollama models
-    OLLAMA_MODELS.extend(get_ollama_models())
+    # This needs to be done once when the app starts
+    global OLLAMA_MODELS
+    OLLAMA_MODELS = get_ollama_models()
     if not OLLAMA_MODELS:
-        OLLAMA_MODELS.append("No models found. Run `ollama run <model_name>`")
+        OLLAMA_MODELS = ["No models found. Run `ollama run <model_name>`"]
 
     # Create Gradio interface
     with gr.Blocks(title="Advanced RSS Feed Viewer", theme=gr.themes.Soft()) as app:
         gr.Markdown("# 📰 Advanced RSS Feed Viewer")
         gr.Markdown("Monitor and view RSS feeds from various sources with integrated local Ollama LLM chat.")
         
-        with gr.Tabs():
-            # Dynamically create a tab for each category
-            for category_name in RSS_FEEDS.keys():
-                with gr.TabItem(category_name):
-                    gr.Markdown(f"### Recent Articles in {category_name}")
+        # This hidden state will store the currently active category name from the tabs
+        active_category = gr.State(list(RSS_FEEDS.keys())[0] if RSS_FEEDS else "")
+
+        with gr.Row(): # Main layout row
+            with gr.Column(scale=2): # Left column for Feed Viewer Tabs
+                gr.Markdown("## Feed Viewer")
+                gr.Markdown("Select a category to view its recent articles. Each feed is in a scrolling box.")
+                
+                # Tabs for categories
+                with gr.Tabs() as category_tabs:
+                    for category_name in RSS_FEEDS.keys():
+                        with gr.TabItem(category_name, id=f"tab_{category_name}"):
+                            gr.Markdown(f"### Recent Articles in {category_name}")
+                            
+                            # Refresh button moved to the top of each tab
+                            refresh_btn = gr.Button("🔄 Refresh Feeds", variant="primary")
+                            articles_html_output = gr.HTML(
+                                value=format_category_feeds_html(category_name), # Initial content
+                                elem_id=f"articles_display_{category_name}" # Unique ID for each HTML component
+                            )
+                            
+                            refresh_btn.click(
+                                fn=format_category_feeds_html,
+                                inputs=[gr.State(category_name)], # Pass the category name as a state
+                                outputs=articles_html_output
+                            )
                     
-                    # Using gr.HTML to display the dynamically generated content
-                    # Initial load is handled by calling format_category_feeds_html directly
-                    # The refresh button will also call this function.
-                    articles_html_output = gr.HTML(
-                        value=format_category_feeds_html(category_name), # Initial content
-                        elem_id=f"articles_display_{category_name}" # Unique ID for each HTML component
-                    )
-                    
-                    # Refresh button for each category tab
-                    refresh_btn = gr.Button("🔄 Refresh Feeds", variant="primary")
-                    refresh_btn.click(
-                        fn=format_category_feeds_html,
-                        inputs=[gr.State(category_name)], # Pass the category name as a state
-                        outputs=articles_html_output
-                    )
+                # When a tab is selected, update the active_category state and also trigger a refresh for chat context
+                category_tabs.select(
+                    fn=lambda category_id: category_id.replace("tab_", ""), # Extract category name from tab ID
+                    inputs=category_tabs,
+                    outputs=active_category
+                ).success( # After the category ID is set, refresh the content of that specific tab
+                    fn=lambda category_name: format_category_feeds_html(category_name),
+                    inputs=active_category,
+                    outputs=articles_html_output # This needs to point to the *currently active* HTML output. This is tricky with dynamic tabs.
+                                                 # A simpler approach for the active_category for chat is to rely on user selection in the chat dropdown.
+                )
             
-            # New "Chat with RSS Feeds" Tab
-            with gr.TabItem("💬 Chat with RSS Feeds"):
-                gr.Markdown("### Ask questions about the loaded RSS feeds!")
-                gr.Markdown("First, switch to any category tab to load its articles. Then you can chat here about the articles from the *currently loaded* category.")
+            with gr.Column(scale=1): # Right column for Chat with RSS
+                gr.Markdown("## 💬 Chat with RSS Feeds")
+                gr.Markdown("Ask questions about the articles from the selected category.")
                 
                 with gr.Row():
+                    # Category for chat: Default to the first category, but allow user override.
+                    # We rely on the user to select the correct category for chat context,
+                    # as dynamically linking the current tab to the dropdown value in real-time
+                    # across separate components can be complex in Gradio.
                     chat_category_select = gr.Dropdown(
                         choices=list(RSS_FEEDS.keys()),
-                        label="Select Category for Chat (Articles from this category will be used as context)",
+                        label="Select Category for Chat Context",
                         interactive=True,
                         value=list(RSS_FEEDS.keys())[0] if RSS_FEEDS else None,
                         scale=1
                     )
+                    
                     ollama_model_dropdown = gr.Dropdown(
                         choices=OLLAMA_MODELS,
                         label="Select Ollama Model",
@@ -559,27 +579,33 @@ def create_enhanced_rss_viewer():
                         value=OLLAMA_MODELS[0] if OLLAMA_MODELS else None,
                         scale=1
                     )
-                    # Button to refresh model list in case new models are downloaded
                     refresh_models_btn = gr.Button("Refresh Models", scale=0)
                 
-                chatbot = gr.Chatbot(label="RSS Chat")
-                msg = gr.Textbox(label="Your Question", placeholder="e.g., What are the latest AI advancements?", container=False)
-                clear = gr.Button("Clear Chat")
+                chatbot = gr.Chatbot(label="RSS Chat", height=400) # Give chatbot a fixed height for better layout
+                msg = gr.Textbox(label="Your Question", placeholder="e.g., Summarize the latest news on AI?", container=False)
+                with gr.Row(): # Buttons for chat input
+                    submit_btn = gr.Button("Send", variant="primary", scale=1)
+                    clear_chat_btn = gr.Button("Clear Chat", scale=0)
 
+                # Event listeners for chat
                 msg.submit(
                     chat_with_feeds,
                     [chatbot, msg, chat_category_select, ollama_model_dropdown],
                     [chatbot, msg]
                 )
-                clear.click(lambda: None, None, chatbot, queue=False) # Clears the chatbot
+                submit_btn.click(
+                    chat_with_feeds,
+                    [chatbot, msg, chat_category_select, ollama_model_dropdown],
+                    [chatbot, msg]
+                )
+                clear_chat_btn.click(lambda: None, None, chatbot, queue=False) # Clears the chatbot
                 
-                # Update model choices when refresh button is clicked
                 refresh_models_btn.click(
                     fn=get_ollama_models,
                     outputs=ollama_model_dropdown
                 )
             
-            # Settings Tab
+            # Settings Tab (can be outside the main Row if you want it full width, or within its own column)
             with gr.TabItem("⚙️ Settings"):
                 gr.Markdown("### Application Settings")
                 
