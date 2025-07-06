@@ -247,42 +247,41 @@ def fetch_all_feeds_parallel() -> Dict[str, Dict[str, FeedData]]:
             all_results[category] = category_results
     return all_results
 
-def get_article_preview(article: Article, preview_lines: int = 3) -> str:
-    """Generates a concise preview of an article, including a clickable link and feed name."""
+def get_article_preview(article: Article, preview_lines: int = 4) -> str:
+    """Generates a concise preview of an article, including a clickable link, feed name, author, and time."""
     # Ensure no HTML tags in the summary for plain text display and truncate
-    # Use BeautifulSoup to parse HTML and get plain text
     clean_summary = BeautifulSoup(article.summary, 'html.parser').get_text().strip()
     
     # Use Markdown for clickable link
     title_line = f"**[{article.title}]({article.link})**"
     
-    # Clearly identify the feed name
-    info_line = f"**Feed:** {article.feed_name} - {article.published} (Author: {article.author})"
+    # Clearly identify the feed name, published date, and author
+    info_line = f"**Feed:** {article.feed_name} | **Published:** {article.published} | **Author:** {article.author}"
     
-    # Simple character-based truncation for summary preview
-    max_chars_per_line = 90 
-    summary_preview_words = []
-    current_length = 0
-    line_count = 0
+    # Truncate summary to the desired number of lines
+    summary_lines = []
+    current_line = ""
+    words = clean_summary.split()
+    
+    for word in words:
+        if not current_line:
+            current_line = word
+        elif len(current_line) + 1 + len(word) <= 90: # Approximate characters per line
+            current_line += " " + word
+        else:
+            summary_lines.append(current_line)
+            current_line = word
+            if len(summary_lines) >= preview_lines:
+                break
+    
+    if current_line and len(summary_lines) < preview_lines:
+        summary_lines.append(current_line)
 
-    # Ensure there's a summary to process
-    if clean_summary:
-        for word in clean_summary.split():
-            if current_length + len(word) + 1 <= max_chars_per_line:
-                summary_preview_words.append(word)
-                current_length += len(word) + 1
-            else:
-                line_count += 1
-                # -1 because title and info lines already take two lines in the final output
-                if line_count >= preview_lines - 1: 
-                    break
-                summary_preview_words.append("\n" + word) # Add newline
-                current_length = len(word) + 1
+    summary_preview = "\n".join(summary_lines)
     
-    summary_preview = " ".join(summary_preview_words).strip()
-    # Check if original summary was longer, implying truncation occurred
-    if clean_summary and len(summary_preview) < len(clean_summary): 
-        summary_preview += "..." # Indicate truncation
+    # Add ellipsis if the original summary was longer than the preview
+    if clean_summary and len(summary_preview.replace("\n", " ")) < len(clean_summary):
+        summary_preview += "..."
 
     return f"{title_line}\n{info_line}\nSummary: {summary_preview}"
 
@@ -310,7 +309,7 @@ def update_all_feed_tabs() -> Tuple[Any, ...]:
                 feed_outputs_for_category += f"**{feed_name}**: No articles found.\n\n"
             else:
                 # Add all articles from this feed to the cache for the current category
-                # This ensures Ollama has full summaries, even if we only display 5
+                # This ensures Ollama has full summaries, even if we only display a few
                 category_articles_for_cache.extend(feed_data.articles) 
                 
                 # Sort articles by published date (if available) and take the top 5
@@ -332,7 +331,7 @@ def update_all_feed_tabs() -> Tuple[Any, ...]:
                 display_articles = sorted(feed_data.articles, key=get_sort_key, reverse=True)[:5]
                 
                 feed_content = "\n\n---\n\n".join([get_article_preview(art) for art in display_articles])
-                feed_outputs_for_category += f"{feed_content}\n\n" # Removed bolding on feed_name here as it's in get_article_preview
+                feed_outputs_for_category += f"{feed_content}\n\n"
 
         # Store all fetched articles (full content) for this category in the global cache
         GLOBAL_ARTICLE_CACHE[category_name] = category_articles_for_cache
@@ -348,7 +347,7 @@ def list_cached_categories() -> gr.Dropdown:
     current_cached_categories = list(GLOBAL_ARTICLE_CACHE.keys())
     # Preserve the current value if it's still in the choices, otherwise set to None
     return gr.Dropdown(choices=current_cached_categories, 
-                       value=None) # Set initial value to None for clarity on refresh
+                        value=None) # Set initial value to None for clarity on refresh
 
 
 # --- Ollama Integration ---
@@ -410,11 +409,13 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
     
     if not selected_category: # Handle case where no category is selected initially
         response_text = "Please select a category from the 'Select Cached Category for Insights' dropdown."
+        # Append as a new message pair
         chat_history.append([user_query, response_text])
         return chat_history, ""
 
     if "Error" in ollama_model or "No models available" in ollama_model:
         error_message = f"Cannot generate insights: {ollama_model}. Please select a valid Ollama model and ensure Ollama server is running."
+        # Append as a new message pair
         chat_history.append([user_query, error_message])
         return chat_history, ""
 
@@ -422,6 +423,7 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
 
     if not articles_to_summarize:
         response_text = f"No articles found in cache for category '{selected_category}'. Please click 'Fetch All Feeds' first and select a category with fetched articles."
+        # Append as a new message pair
         chat_history.append([user_query, response_text])
         return chat_history, ""
 
@@ -449,6 +451,7 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
     messages = [{'role': 'system', 'content': system_prompt}]
     
     # Add previous chat history to maintain context
+    # Chatbot history in Gradio is a list of lists: [[user_msg, ai_msg], ...]
     for human_msg, ai_msg in chat_history:
         messages.append({'role': 'user', 'content': human_msg})
         messages.append({'role': 'assistant', 'content': ai_msg})
@@ -458,13 +461,14 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
     try:
         response = ollama.chat(model=ollama_model, messages=messages)
         ai_response = response['message']['content']
+        # Append the new user query and AI response as a new pair to chat_history
         chat_history.append([user_query, ai_response])
         return chat_history, "" # Clear the textbox after sending
     except Exception as e:
         error_message = f"Error communicating with Ollama model '{ollama_model}': {e}. Ensure the model is pulled and running."
+        # Append the new user query and error message as a new pair to chat_history
         chat_history.append([user_query, error_message])
-        return chat_history, "" # Keep textbox cleared or return original query? Let's clear.
-
+        return chat_history, "" # Clear the textbox after sending
 
 # --- Gradio Interface ---
 
@@ -487,7 +491,8 @@ with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
                         lines=10, 
                         max_lines=20, 
                         interactive=False, 
-                        value="Click 'Fetch All Feeds' to load articles..."
+                        value="Click 'Fetch All Feeds' to load articles...",
+                        render=True # Ensure the component is rendered
                     )
 
     with gr.Tab("AI News Insights"):
@@ -509,7 +514,7 @@ with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
             )
         
         # Chat interface for Ollama
-        # Added type="messages" to address the UserWarning in Gradio
+        # Added type="messages" to address the UserWarning in Gradio and ensure correct format
         chatbot = gr.Chatbot(label="Ollama Chat History", height=300, type="messages") 
         msg = gr.Textbox(label="Ask a question about the articles:", placeholder="e.g., What are the key trends in AI research?")
         clear = gr.ClearButton([msg, chatbot])
