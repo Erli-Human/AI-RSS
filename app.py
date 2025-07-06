@@ -389,7 +389,8 @@ def update_all_feed_tabs_and_render_articles() -> Tuple[Any, ...]:
                         clean_summary = BeautifulSoup(article.summary, 'html.parser').get_text().strip()
 
                         # Combine title and summary for TTS, then JSON dump for safe JS string
-                        tts_content = json.dumps(article.title + ' ' + clean_summary)
+                        # This is the corrected line to use json.dumps for the JavaScript string content directly.
+                        tts_content_for_js = json.dumps(article.title + ' ' + clean_summary)
 
                         # Build the HTML for each article
                         current_category_html += f"""
@@ -404,7 +405,7 @@ def update_all_feed_tabs_and_render_articles() -> Tuple[Any, ...]:
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <button
                                     class="read-aloud-button"
-                                    onclick="readAloudArticle('{article_unique_id}', {tts_content})"
+                                    onclick="readAloudArticle('{article_unique_id}', {tts_content_for_js})"
                                     style="padding: 8px 12px; cursor: pointer; background-color: var(--button-primary-background-color); color: var(--button-primary-text-color); border: none; border-radius: 4px;"
                                 >
                                     Read Aloud 🔊
