@@ -132,7 +132,7 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_feed = {
-            executor.submit(fetch_rss_feed, url): name 
+            executor.submit(fetch_rss_feed, url): name  
             for name, url in feeds.items()
         }
         
@@ -367,8 +367,7 @@ def create_enhanced_rss_viewer():
                 
                 with gr.Row():
                     export_category = gr.Dropdown(
-                        choices=["All Categories"] + list(RSS_FEEDS.
-                                                              choices=["All Categories"] + list(RSS_FEEDS.keys()),
+                        choices=["All Categories"] + list(RSS_FEEDS.keys()),
                         label="Select Category to Export",
                         value="All Categories"
                     )
@@ -460,6 +459,110 @@ from email.mime.text import MIMEText
 from datetime import datetime
 import schedule
 
+# IMPORTANT: These functions (fetch_rss_feed, fetch_category_feeds_parallel, RSS_FEEDS)
+# must be available in the context where this script runs.
+# For a standalone monitoring script, you would typically copy these functions
+# or import them from a shared utility file.
+# For this example, we assume they are globally accessible or copied for simplicity.
+
+# Re-define or import necessary components for the standalone script context
+import requests
+import feedparser
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, asdict
+from typing import Dict, Any, List
+
+# Re-define data structures for the monitoring script's self-containment
+@dataclass
+class Article:
+    title: str
+    link: str
+    published: str
+    summary: str
+    author: str = ""
+
+@dataclass
+class FeedData:
+    status: str
+    articles: List[Article]
+    last_updated: str
+    error: str = ""
+
+RSS_FEEDS = {
+    "🤖 AI & Machine Learning": {
+        "OpenAI Blog": "https://openai.com/blog/rss.xml",
+        "Google AI Blog": "https://ai.googleblog.com/feeds/posts/default",
+        "DeepMind Blog": "https://deepmind.com/blog/feed/basic/",
+        "Towards Data Science": "https://towardsdatascience.com/feed",
+        "Machine Learning Mastery": "https://machinelearningmastery.com/feed/",
+        "AI News": "https://artificialintelligence-news.com/feed/",
+        "The Batch (deeplearning.ai)": "https://www.deeplearning.ai/the-batch/rss.xml"
+    },
+    "💻 Technology": {
+        "TechCrunch": "https://techcrunch.com/feed/",
+        "Ars Technica": "https://feeds.arstechnica.com/arstechnica/index",
+        "The Verge": "https://www.theverge.com/rss/index.xml",
+        "Wired": "https://www.wired.com/feed/rss",
+        "Hacker News": "https://hnrss.org/frontpage",
+        "GitHub Blog": "https://github.blog/feed/",
+        "Stack Overflow Blog": "https://stackoverflow.blog/feed/"
+    },
+    "🔬 Science": {
+        "Nature": "https://www.nature.com/nature.rss",
+        "Science Magazine": "https://www.science.org/rss/news_current.xml",
+        "Scientific American": "https://rss.sciam.com/ScientificAmerican-Global",
+        "New Scientist": "https://www.newscientist.com/feed/home/",
+        "Phys.org": "https://phys.org/rss-feed/"
+    },
+    "📰 News": {
+        "BBC News": "https://feeds.bbci.co.uk/news/rss.xml",
+        "Reuters": "https://www.reutersagency.com/feed/?best-topics=tech",
+        "Associated Press": "https://apnews.com/apf-topnews",
+        "NPR": "https://feeds.npr.org/1001/rss.xml"
+    }
+}
+
+def fetch_rss_feed(url: str, timeout: int = 10) -> FeedData:
+    """Fetch and parse a single RSS feed."""
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        response = requests.get(url, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        feed = feedparser.parse(response.content)
+        if feed.bozo and feed.bozo_exception:
+            return FeedData(status="error", articles=[], last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), error=f"Feed parsing error: {feed.bozo_exception}")
+        articles = []
+        for entry in feed.entries[:10]:
+            article = Article(
+                title=entry.get('title', 'No title'),
+                link=entry.get('link', ''),
+                published=entry.get('published', 'Unknown date'),
+                summary=entry.get('summary', 'No summary available')[:200] + "...",
+                author=entry.get('author', 'Unknown author')
+            )
+            articles.append(article)
+        return FeedData(status="success", articles=articles, last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    except requests.exceptions.RequestException as e:
+        return FeedData(status="error", articles=[], last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), error=f"Network error: {str(e)}")
+    except Exception as e:
+        return FeedData(status="error", articles=[], last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), error=f"Unexpected error: {str(e)}")
+
+def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[str, FeedData]:
+    """Fetch all feeds in a category using parallel processing."""
+    if category not in RSS_FEEDS:
+        return {}
+    feeds = RSS_FEEDS[category]
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_feed = {executor.submit(fetch_rss_feed, url): name for name, url in feeds.items()}
+        for future in as_completed(future_to_feed):
+            feed_name = future_to_feed[future]
+            try:
+                results[feed_name] = future.result()
+            except Exception as e:
+                results[feed_name] = FeedData(status="error", articles=[], last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), error=f"Processing error: {str(e)}")
+    return results
+
 def check_all_feeds():
     """Check all feeds and generate status report."""
     print(f"[INFO] Starting feed check at {datetime.now()}")
@@ -480,7 +583,7 @@ def check_all_feeds():
         'timestamp': datetime.now().isoformat(),
         'total_feeds': total_feeds,
         'working_feeds': working_feeds,
-        'success_rate': (working_feeds / total_feeds) * 100,
+        'success_rate': (working_feeds / total_feeds) * 100 if total_feeds > 0 else 0, # Handle division by zero
         'details': all_results
     }
     
