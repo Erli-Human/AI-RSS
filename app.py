@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Tuple, Optional
 from dataclasses import dataclass, field
 import gradio as gr
 import feedparser
@@ -17,7 +17,7 @@ class Article:
     published: str
     summary: str
     author: str = ""
-    feed_name: str = ""
+    feed_name: str = "" # Store the feed name with the article
 
 @dataclass
 class FeedData:
@@ -26,7 +26,7 @@ class FeedData:
     last_updated: str
     error: str = ""
 
-# RSS Feed Sources
+# RSS Feed Sources (as defined previously)
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
         "Science Daily - AI":
@@ -157,11 +157,10 @@ RSS_FEEDS = {
     }
 }
 
-# Global cache for fetched articles to enable chat functionality
+# Global cache for fetched articles
 GLOBAL_ARTICLE_CACHE: Dict[str, List[Article]] = {}
 # Global variable to store available Ollama models
 OLLAMA_MODELS: List[str] = []
-
 
 # --- RSS Feed Functions ---
 def fetch_rss_feed_single(url: str, feed_name: str, timeout: int = 10) -> FeedData:
@@ -191,7 +190,7 @@ def fetch_rss_feed_single(url: str, feed_name: str, timeout: int = 10) -> FeedDa
                 title=entry.get('title', 'No title'),
                 link=entry.get('link', ''),
                 published=entry.get('published', 'Unknown date'),
-                summary=entry.get('summary', 'No summary available')[:200] + "...",
+                summary=entry.get('summary', 'No summary available'), # Keep full summary for Ollama
                 author=entry.get('author', 'Unknown author'),
                 feed_name=feed_name # Store the feed name with the article
             )
@@ -218,73 +217,105 @@ def fetch_rss_feed_single(url: str, feed_name: str, timeout: int = 10) -> FeedDa
             error=f"Unexpected error: {str(e)}"
         )
 
-def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[str, FeedData]:
-    """Fetch all feeds in a category using parallel processing."""
-    if category not in RSS_FEEDS:
-        return {}
+def fetch_all_feeds_parallel() -> Dict[str, Dict[str, FeedData]]:
+    """Fetches all RSS feeds across all categories using parallel processing."""
+    all_results: Dict[str, Dict[str, FeedData]] = {}
+    
+    with ThreadPoolExecutor(max_workers=10) as executor: # Increased max_workers for more parallelism
+        future_to_category = {}
+        for category, feeds in RSS_FEEDS.items():
+            futures_for_category = {
+                executor.submit(fetch_rss_feed_single, url, name): name
+                for name, url in feeds.items()
+            }
+            future_to_category[category] = futures_for_category
 
-    feeds = RSS_FEEDS[category]
-    results = {}
+        for category, futures_for_category in future_to_category.items():
+            category_results = {}
+            for future in as_completed(futures_for_category):
+                feed_name = futures_for_category[future]
+                try:
+                    category_results[feed_name] = future.result()
+                except Exception as e:
+                    category_results[feed_name] = FeedData(
+                        status="error",
+                        articles=[],
+                        last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        error=f"Processing error for {feed_name}: {str(e)}"
+                    )
+            all_results[category] = category_results
+    return all_results
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_feed = {
-            executor.submit(fetch_rss_feed_single, url, name): name
-            for name, url in feeds.items()
-        }
+def get_article_preview(article: Article, preview_lines: int = 3) -> str:
+    """Generates a concise preview of an article."""
+    title_line = f"Title: {article.title}"
+    info_line = f"Source: {article.feed_name} - {article.published} (Author: {article.author})"
+    
+    # Split summary into words and take enough to fill 3 lines, then truncate
+    summary_words = article.summary.split()
+    preview_words = []
+    current_length = 0
+    
+    # Estimate characters per line (adjust as needed for Gradio's textbox width)
+    # A typical line might hold 80-100 characters. 3 lines = 240-300 chars.
+    # This is a heuristic; actual line breaks depend on font, size, and box width.
+    target_chars_per_line = 90
+    
+    for word in summary_words:
+        if current_length + len(word) + 1 > preview_lines * target_chars_per_line:
+            break
+        preview_words.append(word)
+        current_length += len(word) + 1 # +1 for space
+    
+    summary_preview = " ".join(preview_words)
+    if len(summary_preview) < len(article.summary):
+        summary_preview += "..." # Indicate truncation
 
-        for future in as_completed(future_to_feed):
-            feed_name = future_to_feed[future]
-            try:
-                results[feed_name] = future.result()
-            except Exception as e:
-                results[feed_name] = FeedData(
-                    status="error",
-                    articles=[],
-                    last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    error=f"Processing error: {str(e)}"
-                )
+    return f"{title_line}\n{info_line}\nSummary: {summary_preview}"
 
-    return results
-
-def get_article_display(feed_data: FeedData) -> str:
-    if feed_data.status == "error":
-        return f"<p style='color:red;'>Error fetching feed: {feed_data.error}</p>"
-    if not feed_data.articles:
-        return "<p>No articles found for this feed.</p>"
-
-    html_output = "<ul>"
-    for article in feed_data.articles:
-        html_output += f"""
-        <li>
-            <strong><a href="{article.link}" target="_blank">{article.title}</a></strong>
-            <br>
-            <em>{article.feed_name}</em> - {article.published} (Author: {article.author})
-            <br>
-            {article.summary}
-        </li>
-        """
-    html_output += "</ul>"
-    return html_output
-
-def display_rss_feed_category(category_name: str) -> gr.HTML:
-    """Displays articles for a selected category and caches them."""
+def update_all_feed_tabs() -> Tuple[Any, ...]:
+    """
+    Fetches all feeds and updates the Gradio HTML components for each category tab.
+    Returns a tuple of gr.HTML components, one for each category.
+    """
     global GLOBAL_ARTICLE_CACHE
-    all_category_articles: List[Article] = []
-    category_results = fetch_category_feeds_parallel(category_name)
+    all_feed_data_by_category = fetch_all_feeds_parallel()
     
-    output_html = ""
-    for feed_name, feed_data in category_results.items():
-        output_html += f"<h3>{feed_name}</h3>"
-        output_html += get_article_display(feed_data)
-        if feed_data.status == "success":
-            all_category_articles.extend(feed_data.articles)
+    outputs = []
     
-    GLOBAL_ARTICLE_CACHE[category_name] = all_category_articles
-    return gr.HTML(output_html)
+    for category_name in RSS_FEEDS.keys():
+        category_articles_for_cache: List[Article] = []
+        feed_outputs_for_category = ""
+        
+        category_feeds = all_feed_data_by_category.get(category_name, {})
+        
+        for feed_name, feed_data in category_feeds.items():
+            if feed_data.status == "error":
+                feed_outputs_for_category += f"**{feed_name}**: <span style='color:red;'>Error: {feed_data.error}</span>\n\n"
+            elif not feed_data.articles:
+                feed_outputs_for_category += f"**{feed_name}**: No articles found.\n\n"
+            else:
+                # Add all articles from this feed to the cache for the current category
+                # This ensures Ollama has full summaries, even if we only display 5
+                category_articles_for_cache.extend(feed_data.articles) 
+                
+                # Display only the 5 most recent articles
+                display_articles = sorted(feed_data.articles, key=lambda x: x.published, reverse=True)[:5]
+                
+                feed_content = "\n\n---\n\n".join([get_article_preview(art) for art in display_articles])
+                feed_outputs_for_category += f"**{feed_name}**\n\n{feed_content}\n\n"
 
-def list_cached_categories() -> List[str]:
-    """Returns a list of categories currently in the cache."""
-    return list(GLOBAL_ARTICLE_CACHE.keys())
+        # Store all fetched articles (full content) for this category in the global cache
+        GLOBAL_ARTICLE_CACHE[category_name] = category_articles_for_cache
+        
+        # Append the HTML for the current category's tab. Use gr.Textbox for scrolling.
+        outputs.append(gr.Textbox(value=feed_outputs_for_category.strip(), label=f"{category_name} News", lines=10, max_lines=20, interactive=False))
+        
+    return tuple(outputs)
+
+def list_cached_categories() -> gr.Dropdown:
+    """Returns an updated Gradio Dropdown component with cached categories."""
+    return gr.Dropdown(choices=list(GLOBAL_ARTICLE_CACHE.keys()), label="Select Cached Category for Insights")
 
 
 # --- Ollama Integration ---
@@ -340,66 +371,91 @@ default_ollama_model = ollama_available_models[0] if ollama_available_models and
 print(f"Default Ollama Model set to: {default_ollama_model}")
 print(f"Available Ollama Models: {ollama_available_models}")
 
-def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_model: str) -> str:
-    """Generates insights from cached RSS articles using Ollama."""
-    if "Error" in ollama_model:
-        return f"Cannot generate insights: {ollama_model}. Please select a valid Ollama model."
+
+def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_model: str, chat_history: List[List[str]]) -> Tuple[List[List[str]], str]:
+    """Generates insights from cached RSS articles using Ollama, maintaining chat history."""
+    
+    if "Error" in ollama_model or "No models available" in ollama_model:
+        error_message = f"Cannot generate insights: {ollama_model}. Please select a valid Ollama model and ensure Ollama server is running."
+        chat_history.append([user_query, error_message])
+        return chat_history, ""
 
     articles_to_summarize = GLOBAL_ARTICLE_CACHE.get(selected_category, [])
 
     if not articles_to_summarize:
-        return f"No articles found in cache for category '{selected_category}'. Please fetch the feed first."
+        response_text = f"No articles found in cache for category '{selected_category}'. Please click 'Fetch All Feeds' first and select a category with fetched articles."
+        chat_history.append([user_query, response_text])
+        return chat_history, ""
 
     # Prepare article data for the LLM prompt
-    articles_text = "\n\n".join([
-        f"Title: {article.title}\nSource: {article.feed_name}\nPublished: {article.published}\nSummary: {article.summary}"
+    # Providing more detail to the LLM than just the preview
+    articles_text = "\n\n---\n\n".join([
+        f"Title: {article.title}\nLink: {article.link}\nSource: {article.feed_name}\nPublished: {article.published}\nFull Summary: {article.summary}"
         for article in articles_to_summarize
     ])
 
     system_prompt = (
-        "You are an AI assistant specialized in summarizing news articles. "
-        "Provide a concise and informative response based on the provided articles. "
-        "If the user asks a specific question, try to answer it using the article content. "
-        "If a question cannot be answered from the articles, state that clearly."
+        "You are an AI assistant specialized in summarizing news articles and answering questions about them. "
+        "Provide concise, informative, and relevant responses based *only* on the provided articles. "
+        "If a question cannot be answered from the provided articles, state that you don't have enough information from the given context. "
+        "Maintain a helpful and neutral tone. Prioritize the most recent and relevant information."
     )
 
-    user_prompt = (
-        f"Here are some recent articles from the '{selected_category}' category:\n\n"
+    full_query_with_context = (
+        f"Here are recent articles from the '{selected_category}' category. Use only the information provided in these articles to answer the user's questions:\n\n"
         f"{articles_text}\n\n"
-        f"Based on these articles, please respond to the following: \"{user_query}\""
+        f"User's request: \"{user_query}\"\n\n"
+        "Please provide your response based on these articles, maintaining the conversation flow."
     )
+
+    messages = [{'role': 'system', 'content': system_prompt}]
+    
+    # Add previous chat history to maintain context
+    for human_msg, ai_msg in chat_history:
+        messages.append({'role': 'user', 'content': human_msg})
+        messages.append({'role': 'assistant', 'content': ai_msg})
+    
+    messages.append({'role': 'user', 'content': full_query_with_context})
 
     try:
-        response = ollama.chat(model=ollama_model, messages=[
-            {'role': 'system', 'content': system_prompt},
-            {'role': 'user', 'content': user_prompt}
-        ])
-        return response['message']['content']
+        response = ollama.chat(model=ollama_model, messages=messages)
+        ai_response = response['message']['content']
+        chat_history.append([user_query, ai_response])
+        return chat_history, "" # Clear the textbox after sending
     except Exception as e:
-        return f"Error communicating with Ollama model '{ollama_model}': {e}. Ensure the model is pulled and running."
+        error_message = f"Error communicating with Ollama model '{ollama_model}': {e}. Ensure the model is pulled and running."
+        chat_history.append([user_query, error_message])
+        return chat_history, "" # Keep textbox cleared or return original query? Let's clear.
 
 
 # --- Gradio Interface ---
 
-with gr.Blocks(title="Advanced RSS Feed Viewer") as demo: # Changed the main title
-    gr.Markdown("# Advanced RSS Feed Viewer & AI Assistant") # Changed the main heading
+with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
+    gr.Markdown("# Advanced RSS Feed Viewer & AI Assistant")
 
-    # The entire interface is now within this single tab
     with gr.Tab("RSS Feed Browser"):
-        gr.Markdown("## Browse Latest News Feeds")
-        with gr.Row():
-            category_dropdown = gr.Dropdown(
-                label="Select News Category",
-                choices=list(RSS_FEEDS.keys()),
-                value=list(RSS_FEEDS.keys())[0],
-                interactive=True
-            )
-            fetch_category_button = gr.Button("Fetch Category Feeds")
+        gr.Markdown("## Latest News Across Categories")
+        fetch_all_button = gr.Button("Fetch All Feeds (This may take a moment)")
         
-        rss_articles_display = gr.HTML(label="Articles")
+        # Dictionary to hold output components for each category's feeds
+        # This allows us to dynamically update them.
+        category_html_outputs = {}
+        with gr.Tabs() as category_tabs:
+            for category_name in RSS_FEEDS.keys():
+                with gr.Tab(category_name, id=f"tab_{category_name.replace(' ', '_').replace('&', 'and').lower()}"):
+                    # Initialize Textbox components for each category
+                    # We will update these on button click
+                    # Set a default value to indicate loading or no data
+                    category_html_outputs[category_name] = gr.Textbox(
+                        label=f"Articles for {category_name}",
+                        lines=10, 
+                        max_lines=20, 
+                        interactive=False, 
+                        value="Click 'Fetch All Feeds' to load articles..."
+                    )
 
-        gr.Markdown("---")
-        gr.Markdown("## RSS Feed Insights (powered by Ollama)")
+    with gr.Tab("AI News Insights"):
+        gr.Markdown("## Get AI Insights from Fetched RSS Articles")
         with gr.Row():
             ollama_model_dropdown_rss = gr.Dropdown(
                 label="Select Ollama Model",
@@ -407,32 +463,36 @@ with gr.Blocks(title="Advanced RSS Feed Viewer") as demo: # Changed the main tit
                 value=default_ollama_model,
                 interactive=True
             )
+            # This dropdown will be populated with categories that have been fetched
             cached_category_dropdown = gr.Dropdown(
                 label="Select Cached Category for Insights",
-                choices=[], # Initial empty, updated on fetch
+                choices=[], 
                 interactive=True
             )
-        rss_ollama_query = gr.Textbox(label="Ask a question about the fetched articles:", placeholder="e.g., What are the main headlines?")
-        rss_ollama_generate_button = gr.Button("Generate RSS Insights")
-        rss_ollama_output = gr.Markdown(label="Ollama RSS Insights")
-
-        # Link RSS fetching to UI
-        fetch_category_button.click(
-            display_rss_feed_category,
-            inputs=[category_dropdown],
-            outputs=[rss_articles_display]
-        ).success(
-            fn=list_cached_categories,
-            inputs=[],
-            outputs=[cached_category_dropdown]
-        )
         
-        # Link Ollama for RSS
-        rss_ollama_generate_button.click(
-            generate_rss_summary_ollama,
-            inputs=[cached_category_dropdown, rss_ollama_query, ollama_model_dropdown_rss],
-            outputs=rss_ollama_output
-        )
+        # Chat interface for Ollama
+        chatbot = gr.Chatbot(label="Ollama Chat History", height=300)
+        msg = gr.Textbox(label="Ask a question about the articles:", placeholder="e.g., What are the key trends in AI research?")
+        clear = gr.ClearButton([msg, chatbot])
+
+        # Link chat functionality
+        msg.submit(generate_rss_summary_ollama, 
+                   inputs=[cached_category_dropdown, msg, ollama_model_dropdown_rss, chatbot], 
+                   outputs=[chatbot, msg])
+        clear.click(lambda: (None, ""), inputs=None, outputs=[chatbot, msg])
+
+
+    # Link the "Fetch All Feeds" button to update all category tabs and the cached categories dropdown
+    # We need to map the output components dynamically
+    fetch_all_button.click(
+        update_all_feed_tabs,
+        inputs=[],
+        outputs=list(category_html_outputs.values()) # Pass all textbox components as outputs
+    ).success(
+        list_cached_categories,
+        inputs=[],
+        outputs=[cached_category_dropdown]
+    )
 
 # Launch the Gradio app
 if __name__ == "__main__":
