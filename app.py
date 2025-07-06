@@ -20,7 +20,7 @@ import threading
 import ollama # Import the ollama library
 import os
 
-# --- Data Structures (assuming these are defined elsewhere in your app.py) ---
+# --- Data Structures ---
 @dataclass
 class DailySummary:
     date: str
@@ -40,10 +40,8 @@ class SalesRecord:
     price: float
     region: str
 
-# --- Helper Functions (assuming these are defined elsewhere in your app.py) ---
-# Placeholder for your existing functions
+# --- Helper Functions ---
 def parse_sales_data(file_content: str) -> List[SalesRecord]:
-    # Your existing implementation
     records = []
     f = StringIO(file_content)
     reader = csv.reader(f)
@@ -65,7 +63,6 @@ def parse_sales_data(file_content: str) -> List[SalesRecord]:
     return records
 
 def analyze_data(records: List[SalesRecord]) -> Dict[str, Any]:
-    # Your existing implementation for sales analysis
     df = pd.DataFrame([s.__dict__ for s in records])
     if df.empty:
         return {
@@ -117,7 +114,6 @@ def analyze_data(records: List[SalesRecord]) -> Dict[str, Any]:
     }
 
 def plot_data(records: List[SalesRecord]) -> str:
-    # Your existing implementation for plotting
     df = pd.DataFrame([s.__dict__ for s in records])
     if df.empty:
         return "No data to plot."
@@ -143,7 +139,6 @@ def plot_data(records: List[SalesRecord]) -> str:
     return f'<img src="data:image/png;base64,{img_str}" />'
 
 def send_email(to_address: str, subject: str, body: str, smtp_server: str, smtp_port: int, smtp_user: str, smtp_password: str):
-    # Your existing implementation for sending emails
     try:
         msg = MIMEText(body)
         msg['Subject'] = subject
@@ -159,7 +154,6 @@ def send_email(to_address: str, subject: str, body: str, smtp_server: str, smtp_
         return f"Failed to send email: {e}"
 
 def fetch_rss_feed(url: str) -> List[Dict[str, str]]:
-    # Your existing implementation for RSS feed fetching
     try:
         feed = feedparser.parse(url)
         articles = []
@@ -175,35 +169,26 @@ def fetch_rss_feed(url: str) -> List[Dict[str, str]]:
         print(f"Error fetching RSS feed from {url}: {e}")
         return []
 
-# --- Ollama Integration ---
-
-# This is the function with the primary fix
+# --- Ollama Integration (FIXED) ---
 def get_ollama_models() -> List[str]:
     """
     Fetches a list of available Ollama models.
-    Includes robust error handling and debugging print statements.
+    Handles the actual `ollama._types.ListResponse` object structure.
     """
     try:
         print(f"[{datetime.now()}] Attempting to list Ollama models...")
         models_info = ollama.list()
-        print(f"[{datetime.now()}] Raw Ollama list response: {models_info}") # CRUCIAL DEBUG OUTPUT
+        print(f"[{datetime.now()}] Raw Ollama list response: {models_info}")
 
-        # Check if models_info is a dictionary
-        if not isinstance(models_info, dict):
-            print(f"[{datetime.now()}] Error: Ollama list returned unexpected type: {type(models_info)}. Expected a dictionary.")
-            return ["Error: Ollama response malformed (not a dict)."]
+        if not hasattr(models_info, 'models'):
+            print(f"[{datetime.now()}] Error: Ollama list response object missing 'models' attribute. Response: {models_info}")
+            return ["Error: Ollama response malformed (missing 'models' attribute)."]
 
-        # Check if 'models' key exists
-        if 'models' not in models_info:
-            print(f"[{datetime.now()}] Error: Ollama list response missing 'models' key. Response: {models_info}")
-            return ["Error: Ollama response malformed (missing 'models' key)."]
+        model_list = models_info.models # Access as an attribute, not a dictionary key
 
-        model_list = models_info['models']
-
-        # Check if 'models' value is a list
         if not isinstance(model_list, list):
-            print(f"[{datetime.now()}] Error: 'models' value is not a list. Type: {type(model_list)}. Value: {model_list}")
-            return ["Error: Ollama response malformed ('models' value not a list)."]
+            print(f"[{datetime.now()}] Error: 'models' attribute is not a list. Type: {type(model_list)}. Value: {model_list}")
+            return ["Error: Ollama response malformed ('models' attribute not a list)."]
 
         if not model_list:
             print(f"[{datetime.now()}] No Ollama models found in the response. Have you pulled any yet? (e.g., 'ollama pull llama2')")
@@ -211,51 +196,40 @@ def get_ollama_models() -> List[str]:
 
         models = []
         for i, model_entry in enumerate(model_list):
-            if not isinstance(model_entry, dict):
-                print(f"[{datetime.now()}] Warning: Model entry at index {i} is not a dictionary. Skipping. Entry: {model_entry}")
+            if not hasattr(model_entry, 'model'): # Check for 'model' attribute, which holds the name string
+                print(f"[{datetime.now()}] Warning: Model entry at index {i} missing 'model' attribute. Skipping. Entry: {model_entry}")
                 continue
-            if 'name' in model_entry:
-                models.append(model_entry['name'])
-            else:
-                print(f"[{datetime.now()}] Error: Model entry at index {i} missing 'name' key. Entry: {model_entry}")
-                # You could choose to append a placeholder or skip, depending on desired behavior
-                # For now, let's skip it if 'name' is truly missing to avoid bad entries in dropdown
-                continue
-        
+            
+            models.append(model_entry.model) # Access as an attribute
+
         if not models:
             print(f"[{datetime.now()}] No valid model names extracted after processing Ollama list response.")
             return ["No valid model names extracted."]
 
-        return sorted(list(set(models))) # Use set for uniqueness, then sort
+        return sorted(list(set(models)))
 
     except ConnectionRefusedError:
         print(f"[{datetime.now()}] Error: Connection refused. Is Ollama server running on 127.0.0.1:11434 and accessible?")
         return ["Error: Ollama Server Not Running or Connection Refused."]
     except Exception as e:
         print(f"[{datetime.now()}] An unexpected error occurred while fetching Ollama models: {e}")
-        # Return a more informative error for the UI
         return [f"Error: Could not fetch models. Details: {e}. Check console for more info."]
 
 # Initial fetch of models when the app starts
-# This will try to populate the dropdown.
 ollama_available_models = get_ollama_models()
-# Set a default model. Use the first available, or a fallback message.
 default_ollama_model = ollama_available_models[0] if ollama_available_models and not ollama_available_models[0].startswith("Error") else "No models available / Error fetching"
-# You might want to filter out error messages from default_ollama_model if it's selected as actual model
-# For now, if default_ollama_model contains an error message, it will be the selected one
-# and the user will have to select a valid model.
 
 print(f"Default Ollama Model set to: {default_ollama_model}")
 print(f"Available Ollama Models: {ollama_available_models}")
 
+
 def generate_insights_ollama(sales_data_string: str, query: str, ollama_model: str) -> str:
-    if "Error" in ollama_model:
+    if "Error" in ollama_model: # Check if the selected model is an error message
         return f"Cannot generate insights: {ollama_model}. Please select a valid Ollama model."
     
     records = parse_sales_data(sales_data_string)
     analysis_results = analyze_data(records)
     
-    # Prepare a prompt for Ollama
     prompt_data = {
         "analysis_results": analysis_results,
         "user_query": query,
@@ -304,7 +278,8 @@ with gr.Blocks() as demo:
 
     with gr.Tab("Data Upload & Analysis"):
         with gr.Row():
-            file_upload = gr.File(label="Upload CSV Sales Data", type="file")
+            # FIXED: Changed type="file" to type="filepath"
+            file_upload = gr.File(label="Upload CSV Sales Data", type="filepath")
             data_preview = gr.DataFrame(label="Data Preview")
         
         parse_button = gr.Button("Parse & Analyze Data")
@@ -322,28 +297,29 @@ with gr.Blocks() as demo:
 
     with gr.Tab("Ollama Insights"):
         with gr.Row():
-            # Use the dynamically fetched models for the dropdown
             ollama_model_dropdown = gr.Dropdown(
                 label="Select Ollama Model",
                 choices=ollama_available_models,
-                value=default_ollama_model, # Set default value
+                value=default_ollama_model,
                 interactive=True
             )
             ollama_query = gr.Textbox(label="Ask a question about the sales data:", placeholder="e.g., What were the daily sales trends?")
         ollama_generate_button = gr.Button("Generate Ollama Insights")
         ollama_output = gr.Markdown(label="Ollama Insights")
     
-    # Assuming 'file_content_state' is a way to pass data between tabs without re-uploading
-    # This needs to be defined if not already. Let's assume a State component.
     file_content_state = gr.State(None)
-    parsed_records_state = gr.State([]) # To store parsed SalesRecord objects
-    
-    def handle_file_upload(file):
-        if file is None:
+    parsed_records_state = gr.State([])
+
+    # FIXED: Modified handle_file_upload to read from filepath
+    def handle_file_upload(file_path: str):
+        if file_path is None:
             return None, None
-        file_content = file.read().decode('utf-8')
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            file_content = f.read()
+        
         df_preview = pd.read_csv(StringIO(file_content))
-        return file_content, df_preview.head(5) # Pass raw content and a preview
+        return file_content, df_preview.head(5)
 
     def run_analysis(file_content: str):
         if file_content is None:
@@ -353,7 +329,6 @@ with gr.Blocks() as demo:
         analysis_results = analyze_data(records)
         plot_html = plot_data(records)
 
-        # Convert DailySummary objects to dictionaries for JSON output
         daily_summaries_dict = [ds.__dict__ for ds in analysis_results["daily_summaries"]]
         
         return (
@@ -364,7 +339,7 @@ with gr.Blocks() as demo:
             analysis_results["sales_by_region"],
             daily_summaries_dict,
             plot_html,
-            records # Pass records to state for Ollama insights
+            records
         )
 
 
@@ -381,17 +356,17 @@ with gr.Blocks() as demo:
             sales_by_region_output,
             daily_summaries_output,
             plot_output,
-            parsed_records_state # Output records to state for later use
+            parsed_records_state
         ]
     )
 
     ollama_generate_button.click(
         generate_insights_ollama,
-        inputs=[file_content_state, ollama_query, ollama_model_dropdown], # Use file_content_state
+        inputs=[file_content_state, ollama_query, ollama_model_dropdown],
         outputs=ollama_output
     )
 
-    # --- Scheduler Tab (if you have one) ---
+    # --- Scheduler Tab ---
     with gr.Tab("Scheduled Tasks"):
         with gr.Row():
             email_address_input = gr.Textbox(label="Recipient Email", placeholder="your_email@example.com")
@@ -405,12 +380,10 @@ with gr.Blocks() as demo:
         schedule_button = gr.Button("Schedule Email Report")
         scheduler_status = gr.Textbox(label="Scheduler Status", interactive=False)
 
-        # RSS Feed Fetcher
         rss_url_input = gr.Textbox(label="RSS Feed URL", placeholder="e.g., https://www.nytimes.com/services/xml/rss/nyt/HomePage.xml")
         fetch_rss_button = gr.Button("Fetch RSS Feed")
         rss_output = gr.JSON(label="RSS Feed Articles")
         
-        # Scheduler thread management
         scheduler_thread = None
         scheduler_stop_event = threading.Event()
 
@@ -427,18 +400,18 @@ with gr.Blocks() as demo:
             global scheduler_thread
             if scheduler_thread and scheduler_thread.is_alive():
                 scheduler_stop_event.set()
-                scheduler_thread.join(timeout=5) # Give it a moment to stop
+                scheduler_thread.join(timeout=5)
                 return "Scheduler stopped."
             return "Scheduler is not running."
 
         def run_scheduler(stop_event: threading.Event):
             while not stop_event.is_set():
                 schedule.run_pending()
-                time.sleep(1) # Check every second
+                time.sleep(1)
 
         def schedule_email_report_action(
             email_address: str, subject: str, smtp_server: str, smtp_port: int, smtp_user: str, smtp_password: str,
-            schedule_time: str, records_from_state: List[SalesRecord] # Get records from state
+            schedule_time: str, records_from_state: List[SalesRecord]
         ):
             if not records_from_state:
                 return "No sales data available to schedule report. Please upload and analyze data first."
@@ -467,17 +440,16 @@ with gr.Blocks() as demo:
                 print(f"Scheduled email send result: {send_result}")
                 return send_result
 
-            # Clear existing jobs to prevent duplicates if scheduled multiple times
             schedule.clear('daily_report_job') 
             schedule.every().day.at(schedule_time).do(job).tag('daily_report_job')
-            start_scheduler_thread() # Ensure scheduler thread is running
+            start_scheduler_thread()
             return f"Email report scheduled for {schedule_time} daily."
 
         schedule_button.click(
             schedule_email_report_action,
             inputs=[
                 email_address_input, email_subject_input, smtp_server_input, smtp_port_input,
-                smtp_user_input, smtp_password_input, schedule_time_input, parsed_records_state # Use parsed_records_state
+                smtp_user_input, smtp_password_input, schedule_time_input, parsed_records_state
             ],
             outputs=scheduler_status
         )
