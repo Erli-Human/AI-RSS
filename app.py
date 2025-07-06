@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from io import StringIO, BytesIO
 import base64
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from dataclasses import dataclass, asdict
 import gradio as gr
 import schedule
@@ -16,6 +16,9 @@ import feedparser
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+
+# Import the ollama client library
+import ollama
 
 # Data structures
 @dataclass
@@ -98,7 +101,7 @@ RSS_FEEDS = {
         "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
         "CNN": "http://rss.cnn.com/rss/edition.rss",
         "New York Times": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
-        "The Guardian": "https://www.guardian.com/world/rss",
+        "The Guardian": "https://www.theguardian.com/world/rss",
         "Washington Post": "https://feeds.washingtonpost.com/rss/world",
         "Google News": "https://news.google.com/rss",
         "NPR": "https://feeds.npr.org/1001/rss.xml",
@@ -170,7 +173,8 @@ RSS_FEEDS = {
 # This is a simple in-memory cache. For a real app, consider persistent storage.
 # Key: category name, Value: List of Article objects
 GLOBAL_ARTICLE_CACHE: Dict[str, List[Article]] = {}
-
+# Global variable to store available Ollama models
+OLLAMA_MODELS: List[str] = []
 
 # Core RSS functionality
 def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
@@ -255,212 +259,326 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
     
     return results
 
+# Ollama Integration Functions
+def get_ollama_models() -> List[str]:
+    """Fetches a list of available Ollama models."""
+    try:
+        models_info = ollama.list()
+        return [model['name'] for model in models_info['models']]
+    except Exception as e:
+        print(f"Error fetching Ollama models: {e}")
+        return []
+
+def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
+    """Generates a response from Ollama based on the provided messages."""
+    try:
+        response = ollama.chat(model=model, messages=messages)
+        return response['message']['content']
+    except Exception as e:
+        print(f"Error calling Ollama model '{model}': {e}")
+        return f"Error: Could not get a response from Ollama model '{model}'. Please ensure Ollama server is running and the model is downloaded. Error details: {e}"
+
 # Main application
 def create_enhanced_rss_viewer():
     """Create the main RSS viewer application."""
     
-    # Modified to accept a dictionary of feed_name -> List[Article]
-    def format_articles_html(feeds_with_articles: Dict[str, List[Article]], num_articles_per_feed: int = 3) -> str:
-        """Format articles from multiple feeds as HTML, showing a preview per feed."""
-        if not feeds_with_articles:
-            return "<p>No articles found for the selected category.</p>"
-        
-        html = "<div style='max-height: 600px; overflow-y: auto;'>"
-        
-        for feed_name, articles in feeds_with_articles.items():
-            html += f"<div style='border: 1px solid #ccc; margin: 20px 0; padding: 15px; border-radius: 8px; background-color: #f9f9f9;'>"
-            html += f"<h3 style='color: #333;'>Feed: {feed_name}</h3>"
+    def get_published_date(article):
+        """Helper to safely parse article published date for sorting."""
+        try:
+            parsed_date = feedparser._parse_date_rfc822(article.published)
+            if parsed_date is None:
+                parsed_date = feedparser._parse_date_iso8601(article.published)
             
-            if not articles:
-                html += "<p>No articles available for this feed.</p>"
+            if parsed_date is not None:
+                return datetime(*parsed_date[:6]) 
             else:
-                # Re-introducing sorting with a robust date parsing
-                # This helps ensure the 'top N' articles are truly the latest.
-                def get_published_date(article):
-                    try:
-                        # Attempt to parse common RSS date formats using feedparser's internal methods
-                        parsed_date = feedparser._parse_date_rfc822(article.published)
-                        if parsed_date is None:
-                            parsed_date = feedparser._parse_date_iso8601(article.published)
-                        
-                        if parsed_date is not None:
-                            # Convert time.struct_time to datetime object for comparison
-                            return datetime(*parsed_date[:6]) 
-                        else:
-                            # Fallback for unparseable dates: treat as very old
-                            return datetime.min
-                    except Exception:
-                        # Catch any other parsing errors and treat as very old
-                        return datetime.min
-                
-                # Sort articles by published date (most recent first)
-                articles.sort(key=get_published_date, reverse=True)
-                
-                displayed_articles = articles[:num_articles_per_feed]
+                return datetime.min
+        except Exception:
+            return datetime.min
 
+    def format_category_feeds_html(category: str, num_articles_per_feed: int = 3) -> str:
+        """
+        Fetches and formats articles for a specific category as HTML,
+        with each feed in its own scrolling box and articles in a 3-column layout.
+        """
+        feeds_data = fetch_category_feeds_parallel(category)
+        
+        # Cache ALL articles (across all feeds in the category) for the chat tab
+        all_articles_for_cache = []
+        for feed_data in feeds_data.values():
+            if feed_data.status == 'success':
+                all_articles_for_cache.extend(feed_data.articles)
+        GLOBAL_ARTICLE_CACHE[category] = all_articles_for_cache
+
+        if not feeds_data:
+            return "<p>No feeds found for this category.</p>"
+        
+        html_content = f"""
+        <style>
+            /* Main container for all feeds in a category */
+            .category-feeds-container {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 20px; /* Gap between individual feed boxes */
+                height: 100%; /* Occupy full height of the parent tab */
+                overflow-y: auto; /* Enable scrolling for the entire category view if needed */
+                padding: 10px;
+                box-sizing: border-box;
+            }}
+
+            /* Individual feed box */
+            .feed-box {{
+                flex: 1 1 calc(50% - 30px); /* Two columns, adjust for gap */
+                min-width: 350px; /* Minimum width before wrapping */
+                max-width: calc(50% - 30px); /* Max width to ensure two columns */
+                height: 400px; /* Fixed height for consistent scrolling box */
+                border: 1px solid #ccc;
+                border-radius: 8px;
+                padding: 15px;
+                background-color: #f9f9f9;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                display: flex;
+                flex-direction: column; /* Stack header and article grid */
+                overflow: hidden; /* Hide overflow to make inner content scrollable */
+                box-sizing: border-box;
+            }}
+
+            .feed-box h3 {{
+                margin-top: 0;
+                margin-bottom: 10px;
+                color: #333;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 5px;
+            }}
+
+            .feed-articles-scroll {{
+                flex-grow: 1; /* Allows this part to take remaining height */
+                overflow-y: auto; /* Make articles scrollable within the box */
+                padding-right: 10px; /* Add some padding for scrollbar */
+            }}
+
+            .article-grid {{
+                display: flex;
+                flex-wrap: wrap; /* Allows articles to wrap to the next line */
+                gap: 15px; /* Space between articles */
+                justify-content: flex-start; /* Align items to the start */
+            }}
+            .article-item {{
+                flex: 1 1 calc(33.333% - 10px); /* Adjust to allow for 3 columns with gap */
+                box-sizing: border-box; /* Include padding and border in the element's total width and height */
+                border: 1px solid #eee;
+                padding: 10px;
+                border-radius: 5px;
+                background-color: #fff;
+                min-width: 180px; /* Smaller min-width for 3 cols within a smaller box */
+                max-width: 100%; /* Ensure it doesn't exceed its container */
+                margin-bottom: 10px; /* Space below each article */
+            }}
+            .article-item h4 {{
+                margin-top: 0;
+                margin-bottom: 5px;
+                font-size: 1.0em; /* Slightly smaller font for compactness */
+                line-height: 1.3;
+            }}
+            .article-item p {{
+                margin-bottom: 5px;
+                font-size: 0.85em; /* Smaller font for meta info */
+                color: #666;
+            }}
+            .article-item a {{
+                color: #2196F3;
+                text-decoration: none;
+            }}
+            .article-item a:hover {{
+                text-decoration: underline;
+            }}
+
+            /* Responsive adjustments */
+            @media (max-width: 1200px) {{
+                .feed-box {{
+                    flex: 1 1 calc(100% - 20px); /* Single column layout on smaller screens */
+                    max-width: 100%;
+                }}
+                .article-item {{
+                    flex: 1 1 calc(50% - 10px); /* 2 columns within feed box on medium screens */
+                }}
+            }}
+            @media (max-width: 768px) {{
+                .article-item {{
+                    flex: 1 1 100%; /* Single column within feed box on very small screens */
+                }}
+            }}
+        </style>
+        <div class='category-feeds-container'>
+        """
+        
+        for feed_name, feed_data in feeds_data.items():
+            status_icon = "✅" if feed_data.status == 'success' else "❌"
+            error_message = f"<p style='color: red;'><strong>Error:</strong> {feed_data.error}</p>" if feed_data.error else ""
+            
+            html_content += f"""
+            <div class='feed-box'>
+                <h3>{status_icon} {feed_name}</h3>
+                {error_message}
+                <div class='feed-articles-scroll'>
+            """
+            
+            if feed_data.status == 'success' and feed_data.articles:
+                articles = sorted(feed_data.articles, key=get_published_date, reverse=True)
+                displayed_articles = articles[:num_articles_per_feed]
+                
+                html_content += "<div class='article-grid'>"
                 for article in displayed_articles:
-                    html += f"""
-                    <div style='border: 1px solid #eee; margin: 10px 0; padding: 10px; border-radius: 5px; background-color: #fff;'>
-                        <h4><a href='{article.link}' target='_blank' style='color: #2196F3; text-decoration: none;'>{article.title}</a></h4>
-                        <p style='color: #666; font-size: 0.9em;'>📅 {article.published} | ✍️ {article.author}</p>
+                    html_content += f"""
+                    <div class='article-item'>
+                        <h4><a href='{article.link}' target='_blank'>{article.title}</a></h4>
+                        <p>📅 {article.published} | ✍️ {article.author}</p>
                         <p>{article.summary}</p>
                     </div>
                     """
-            html += "</div>"
-        html += "</div>"
-        return html
-    
-    def load_category_feeds(category):
-        """Load feeds for a specific category and cache articles."""
-        if not category or category not in RSS_FEEDS:
-            return "Please select a category.", ""
-        
-        try:
-            feeds_data = fetch_category_feeds_parallel(category)
-            
-            # Create status summary
-            total_feeds = len(feeds_data)
-            working_feeds = sum(1 for feed in feeds_data.values() if feed.status == 'success')
-            
-            status_html = f"""
-            <div style='background: #f0f0f0; padding: 15px; border-radius: 5px; margin-bottom: 20px;'>
-                <h3>📊 Category: {category}</h3>
-                <p><strong>Status:</strong> {working_feeds}/{total_feeds} feeds working ({(working_feeds/total_feeds)*100:.1f}%)</p>
-                <p><strong>Last Updated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            </div>
-            """
-            
-            # Create feed details and prepare articles for display and caching
-            feeds_html = ""
-            all_articles_for_cache = [] # All articles for the chat cache
-            articles_for_display = {} # Dictionary: feed_name -> List[Article] for display
-            
-            for feed_name, feed_data in feeds_data.items():
-                if feed_data.status == 'success':
-                    status_icon = "✅"
-                    article_count = len(feed_data.articles)
-                    all_articles_for_cache.extend(feed_data.articles)
-                    articles_for_display[feed_name] = feed_data.articles
-                else:
-                    status_icon = "❌"
-                    article_count = 0
+                html_content += "</div>" # Close article-grid
+            else:
+                html_content += "<p>No articles available or feed error.</p>"
                 
-                feeds_html += f"""
-                <div style='border-left: 4px solid {"#4CAF50" if feed_data.status == "success" else "#f44336"}; padding-left: 15px; margin: 10px 0;'>
-                    <h4>{status_icon} {feed_name}</h4>
-                    <p><strong>Articles:</strong> {article_count} | <strong>Updated:</strong> {feed_data.last_updated}</p>
-                    {f"<p style='color: red;'><strong>Error:</strong> {feed_data.error}</p>" if feed_data.error else ""}
-                </div>
-                """
+            html_content += "</div>" # Close feed-articles-scroll
+            html_content += "</div>" # Close feed-box
             
-            # Cache ALL articles (across all feeds in the category) for the chat tab
-            # Sorting for the cache isn't strictly necessary here as chat will filter/search
-            GLOBAL_ARTICLE_CACHE[category] = all_articles_for_cache
-            
-            # Format articles for display, showing previews per feed
-            articles_html = format_articles_html(articles_for_display, num_articles_per_feed=3) 
-            
-            return status_html + feeds_html, articles_html
-            
-        except Exception as e:
-            error_msg = f"Error loading feeds: {str(e)}"
-            return error_msg, ""
-    
-    def refresh_feeds(category):
-        """Refresh feeds for the selected category."""
-        return load_category_feeds(category)
+        html_content += "</div>" # Close category-feeds-container
+        return html_content
 
     # Function for the "Chat with RSS feeds" tab
-    def chat_with_feeds(chat_history: List[List[str]], user_input: str, chat_category: str):
+    def chat_with_feeds(
+        chat_history: List[List[str]],
+        user_input: str,
+        chat_category: str,
+        ollama_model_name: str
+    ) -> Tuple[List[List[str]], str]:
+        """
+        Processes user input and generates a response using Ollama,
+        leveraging cached RSS articles as context.
+        """
         if not user_input.strip():
             return chat_history, "Please enter a query."
 
         if not chat_category or chat_category not in GLOBAL_ARTICLE_CACHE:
             return chat_history, "Please select a category and load its feeds first in the Feed Viewer tab."
         
-        articles_to_search = GLOBAL_ARTICLE_CACHE[chat_category]
-        
-        # --- Simple Keyword-based "Chat" (replace with actual LLM integration for real chat) ---
-        response_articles = []
-        user_input_lower = user_input.lower()
-        
-        for article in articles_to_search:
-            # Check title, summary, and feed_name for keywords
-            if user_input_lower in article.title.lower() or \
-               user_input_lower in article.summary.lower() or \
-               user_input_lower in article.feed_name.lower():
-                response_articles.append(article)
-                if len(response_articles) >= 5: # Limit responses to top 5 matches
-                    break
-        
-        if response_articles:
-            chat_response = "Here are some relevant articles:\n\n"
-            for article in response_articles:
-                chat_response += f"**Feed:** {article.feed_name}\n" # Include feed name in chat response
-                chat_response += f"**Title:** [{article.title}]({article.link})\n"
-                chat_response += f"**Summary:** {article.summary}\n\n"
-        else:
-            chat_response = "Sorry, I couldn't find any articles matching your query in the current category. Try a different keyword or load another category."
-        # --- End of Simple Keyword-based "Chat" ---
+        if not ollama_model_name:
+            return chat_history, "Please select an Ollama model."
 
-        chat_history.append([user_input, chat_response])
+        articles_to_search = GLOBAL_ARTICLE_CACHE[chat_category]
+
+        # Construct context from articles
+        context_articles_str = ""
+        if articles_to_search:
+            context_articles_str = "Here is a list of recent articles from the selected RSS category. Please use this information to answer the user's questions:\n\n"
+            for i, article in enumerate(articles_to_search[:20]): # Limit context to top 20 articles to avoid exceeding context window
+                context_articles_str += (
+                    f"Article {i+1}:\n"
+                    f"  Feed: {article.feed_name}\n"
+                    f"  Title: {article.title}\n"
+                    f"  Link: {article.link}\n"
+                    f"  Published: {article.published}\n"
+                    f"  Summary: {article.summary}\n\n"
+                )
+            context_articles_str += "\nIf the user asks about general knowledge not related to these articles, answer generally but prioritize the provided article context when relevant.\n"
+        else:
+            context_articles_str = "No articles are available for the selected category. Please answer the user's questions based on general knowledge."
+
+        # Prepare messages for Ollama API
+        messages = [
+            {"role": "system", "content": f"You are a helpful assistant specialized in summarizing and answering questions about RSS feed content. {context_articles_str}"}
+        ]
+
+        # Add past conversation to messages
+        for human_msg, ai_msg in chat_history:
+            messages.append({"role": "user", "content": human_msg})
+            messages.append({"role": "assistant", "content": ai_msg})
+        
+        # Add current user message
+        messages.append({"role": "user", "content": user_input})
+
+        try:
+            # Call Ollama for response
+            ai_response = generate_ollama_response(ollama_model_name, messages)
+        except Exception as e:
+            ai_response = f"An error occurred while communicating with Ollama: {e}"
+        
+        chat_history.append([user_input, ai_response])
         return chat_history, "" # Clear user input box
 
 
+    # Initial population of Ollama models
+    OLLAMA_MODELS.extend(get_ollama_models())
+    if not OLLAMA_MODELS:
+        OLLAMA_MODELS.append("No models found. Run `ollama run <model_name>`")
+
     # Create Gradio interface
-    with gr.Blocks(title="Datanacci Advanced RSS Viewer", theme=gr.themes.Soft()) as app:
-        gr.Markdown("# 📰 Datanacci Advanced RSS Viewer")
-        gr.Markdown("Monitor and view RSS feeds from various sources with a basic chat functionality.")
+    with gr.Blocks(title="Advanced RSS Feed Viewer", theme=gr.themes.Soft()) as app:
+        gr.Markdown("# 📰 Advanced RSS Feed Viewer")
+        gr.Markdown("Monitor and view RSS feeds from various sources with integrated local Ollama LLM chat.")
         
         with gr.Tabs():
-            # Main Feed Viewer Tab
-            with gr.TabItem("📖 Feed Viewer"):
-                with gr.Row():
-                    category_dropdown = gr.Dropdown(
-                        choices=list(RSS_FEEDS.keys()),
-                        label="Select Category",
-                        value=list(RSS_FEEDS.keys())[0] if RSS_FEEDS else None # Handle empty RSS_FEEDS
-                    )
-                    refresh_btn = gr.Button("🔄 Refresh", variant="primary")
-                
-                with gr.Row():
-                    with gr.Column(scale=1):
-                        feed_status = gr.HTML(label="Feed Status")
-                    with gr.Column(scale=2):
-                        articles_display = gr.HTML(label="Recent Articles Previews (Per Feed)")
-                
-                # Load initial data
-                if RSS_FEEDS: # Only add change listener if there are feeds to load
-                    category_dropdown.change(
-                        fn=load_category_feeds,
-                        inputs=[category_dropdown],
-                        outputs=[feed_status, articles_display]
+            # Dynamically create a tab for each category
+            for category_name in RSS_FEEDS.keys():
+                with gr.TabItem(category_name):
+                    gr.Markdown(f"### Recent Articles in {category_name}")
+                    
+                    # Using gr.HTML to display the dynamically generated content
+                    # Initial load is handled by calling format_category_feeds_html directly
+                    # The refresh button will also call this function.
+                    articles_html_output = gr.HTML(
+                        value=format_category_feeds_html(category_name), # Initial content
+                        elem_id=f"articles_display_{category_name}" # Unique ID for each HTML component
                     )
                     
+                    # Refresh button for each category tab
+                    refresh_btn = gr.Button("🔄 Refresh Feeds", variant="primary")
                     refresh_btn.click(
-                        fn=refresh_feeds,
-                        inputs=[category_dropdown],
-                        outputs=[feed_status, articles_display]
+                        fn=format_category_feeds_html,
+                        inputs=[gr.State(category_name)], # Pass the category name as a state
+                        outputs=articles_html_output
                     )
             
             # New "Chat with RSS Feeds" Tab
             with gr.TabItem("💬 Chat with RSS Feeds"):
                 gr.Markdown("### Ask questions about the loaded RSS feeds!")
-                gr.Markdown("First, go to the 'Feed Viewer' tab and select a category to load its articles. Then you can chat here.")
+                gr.Markdown("First, switch to any category tab to load its articles. Then you can chat here about the articles from the *currently loaded* category.")
                 
-                chat_category_select = gr.Dropdown(
-                    choices=list(RSS_FEEDS.keys()),
-                    label="Select Category for Chat",
-                    interactive=True,
-                    value=list(RSS_FEEDS.keys())[0] if RSS_FEEDS else None
-                )
-
+                with gr.Row():
+                    chat_category_select = gr.Dropdown(
+                        choices=list(RSS_FEEDS.keys()),
+                        label="Select Category for Chat (Articles from this category will be used as context)",
+                        interactive=True,
+                        value=list(RSS_FEEDS.keys())[0] if RSS_FEEDS else None,
+                        scale=1
+                    )
+                    ollama_model_dropdown = gr.Dropdown(
+                        choices=OLLAMA_MODELS,
+                        label="Select Ollama Model",
+                        interactive=True,
+                        value=OLLAMA_MODELS[0] if OLLAMA_MODELS else None,
+                        scale=1
+                    )
+                    # Button to refresh model list in case new models are downloaded
+                    refresh_models_btn = gr.Button("Refresh Models", scale=0)
+                
                 chatbot = gr.Chatbot(label="RSS Chat")
-                msg = gr.Textbox(label="Your Question", placeholder="e.g., What are the latest AI advancements?")
+                msg = gr.Textbox(label="Your Question", placeholder="e.g., What are the latest AI advancements?", container=False)
                 clear = gr.Button("Clear Chat")
 
-                msg.submit(chat_with_feeds, [chatbot, msg, chat_category_select], [chatbot, msg])
+                msg.submit(
+                    chat_with_feeds,
+                    [chatbot, msg, chat_category_select, ollama_model_dropdown],
+                    [chatbot, msg]
+                )
                 clear.click(lambda: None, None, chatbot, queue=False) # Clears the chatbot
+                
+                # Update model choices when refresh button is clicked
+                refresh_models_btn.click(
+                    fn=get_ollama_models,
+                    outputs=ollama_model_dropdown
+                )
             
             # Settings Tab
             with gr.TabItem("⚙️ Settings"):
@@ -470,6 +588,7 @@ def create_enhanced_rss_viewer():
                     with gr.Column():
                         gr.Markdown("#### Feed Sources")
                         feed_count = sum(len(feeds) for feeds in RSS_FEEDS.values())
+                        gr.Markdown(f"**Total Categories:** {len(RSS_FEEDS)}")
                         gr.Markdown(f"**Total Feeds:** {feed_count}")
                         
                         for category, feeds in RSS_FEEDS.items():
@@ -480,167 +599,25 @@ def create_enhanced_rss_viewer():
                         gr.Markdown(f"**Last Started:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                         gr.Markdown("**Status:** Running")
                         gr.Markdown("**Version:** 1.0.0")
-        
-        # Load initial data on startup
-        if RSS_FEEDS: # Only load if there are feeds
-            app.load(
-                fn=lambda: load_category_feeds(list(RSS_FEEDS.keys())[0]),
-                outputs=[feed_status, articles_display]
-            )
-    
+                        gr.Markdown("---")
+                        gr.Markdown("#### Ollama Status")
+                        ollama_status_display = gr.HTML(label="Ollama Server Status")
+
+                # Function to check Ollama status
+                def check_ollama_status():
+                    try:
+                        models = ollama.list()
+                        num_models = len(models.get('models', []))
+                        return f"<p style='color: green;'>✅ Ollama Server is Running!</p><p>Available Models: {num_models}</p>"
+                    except Exception as e:
+                        return f"<p style='color: red;'>❌ Ollama Server Not Reachable. Error: {e}</p><p>Please ensure Ollama is installed and running (`ollama serve`).</p>"
+
+                app.load(
+                    fn=check_ollama_status,
+                    outputs=ollama_status_display
+                )
+
     return app
-
-# Monitoring Script (kept as is, but it's not directly part of the Gradio app's tabs)
-def create_monitoring_script():
-    """Create a separate monitoring script for continuous feed checking."""
-    
-    # Removed emojis from the string literal to avoid encoding issues
-    monitoring_script = '''#!/usr/bin/env python3
-"""
-RSS Feed Monitoring Script
-Runs continuous monitoring of RSS feeds and generates reports.
-"""
-
-import time
-import json
-import smtplib
-from email.mime.text import MIMEText
-from datetime import datetime
-import schedule
-
-# IMPORTANT: These functions (fetch_rss_feed, fetch_category_feeds_parallel, RSS_FEEDS)
-# must be available in the context where this script runs.
-# For a standalone monitoring script, you would typically copy these functions
-# or import them from a shared utility file.
-# For this example, we assume they are globally accessible or copied for simplicity.
-
-# Re-define or import necessary components for the standalone script context
-import requests
-import feedparser
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, asdict
-from typing import Dict, Any, List
-
-# Re-define data structures for the monitoring script's self-containment
-@dataclass
-class Article:
-    title: str
-    link: str
-    published: str
-    summary: str
-    author: str = ""
-    feed_name: str = "" # Added for consistency if needed by monitoring
-
-@dataclass
-class FeedData:
-    status: str
-    articles: List[Article]
-    last_updated: str
-    error: str = ""
-
-# RSS Feed Sources - Matches the main app's RSS_FEEDS
-RSS_FEEDS = {
-    "🤖 AI & MACHINE LEARNING": {
-        "Science Daily - AI":   
-        "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
-        "Science Daily - Technology":  
-        "https://www.sciencedaily.com/rss/top/technology.xml",
-        "Sam Altman Blog": "https://blog.samaltman.com/",
-        "O'Reilly Radar": "https://feeds.feedburner.com/oreilly-radar",
-        "Google AI Blog": "https://ai.googleblog.com/feeds/posts/default",
-        "OpenAI Blog": "https://openai.com/blog/rss.xml",
-        "DeepMind Blog": "https://deepmind.com/blog/feed/basic/",
-        "Microsoft AI Blog": "https://blogs.microsoft.com/ai/feed/",
-        "Machine Learning Mastery": "https://machinelearningmastery.com/feed/",
-        "MarkTechPost": "https://www.marktechpost.com/feed/",
-        "Berkeley AI Research": "https://bair.berkeley.edu/blog/feed.xml",
-        "Distill": "https://distill.pub/rss.xml",
-        "Unite.AI": "https://www.unite.ai/feed/",
-        "AI News": "https://www.artificialintelligence-news.com/feed/",
-        "VentureBeat AI": "https://venturebeat.com/ai/feed/",
-        "MIT Technology Review": "https://www.technologyreview.com/feed/",
-        "IEEE Spectrum": "https://spectrum.ieee.org/rss/fulltext"
-    },
-    
-    "💰 FINANCE & BUSINESS": {
-        "Investing.com": "https://www.investing.com/rss/news.rss",
-        "Seeking Alpha": "https://seekingalpha.com/market_currents.xml",
-        "Fortune": "https://fortune.com/feed",
-        "Forbes Business": "https://www.forbes.com/business/feed/",
-        "Economic Times": "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
-        "CNBC": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
-        "Yahoo Finance": "https://finance.yahoo.com/news/rssindex",
-        "Financial Samurai": "https://www.financialsamurai.com/feed/",
-        "NerdWallet": "https://www.nerdwallet.com/blog/feed/",
-        "Money Under 30": "https://www.moneyunder30.com/feed",
-        "Wall Street Journal": "https://www.wsj.com/xml/rss/3_7085.xml",
-        "Bloomberg": "https://feeds.bloomberg.com/markets/news.rss"
-    },
-    
-    "🔬 SCIENCE & PHYSICS": {
-        "Phys.org": "https://phys.org/rss-feed/",
-        "Nature": "https://www.nature.com/nature.rss",
-        "Physical Review Letters": "https://feeds.aps.org/rss/recent/prl.xml",
-        "Scientific American": "https://rss.sciam.com/ScientificAmerican-Global",
-        "New Scientist": "https://www.newscientist.com/feed/home/",
-        "Physics World": "https://physicsworld.com/feed/",
-        "Symmetry Magazine": "https://www.symmetrymagazine.org/rss/all-articles.xml",
-        "Space.com": "https://www.space.com/feeds/all",
-        "NASA Breaking News": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
-        "Sky & Telescope": "https://www.skyandtelescope.com/feed/",
-        "Science Daily": "https://www.sciencedaily.com/rss/all.xml"
-    },
-    
-    "💻 TECHNOLOGY": {
-        "TechCrunch": "https://techcrunch.com/feed/",
-        "The Verge": "https://www.theverge.com/rss/index.xml",
-        "Ars Technica": "https://arstechnica.com/feed/",
-        "Wired": "https://www.wired.com/feed/rss",
-        "Gizmodo": "https://gizmodo.com/rss",
-        "Engadget": "https://www.engadget.com/rss.xml",
-        "Hacker News": "https://news.ycombinator.com/rss",
-        "Slashdot": "https://slashdot.org/slashdot.rss",
-        "Reddit Technology": "https://www.reddit.com/r/technology/.rss",
-        "The Next Web": "https://thenextweb.com/feed/",
-        "ZDNet": "https://www.zdnet.com/news/rss.xml",
-        "TechRadar": "https://www.techradar.com/rss"
-    },
-    
-    "📰 GENERAL NEWS": {
-        "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
-        "CNN": "http://rss.cnn.com/rss/edition.rss",
-        "New York Times": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
-        "The Guardian": "https://www.theguardian.com/world/rss",
-        "Washington Post": "https://feeds.washingtonpost.com/rss/world",
-        "Google News": "https://news.google.com/rss",
-        "Reuters": "https://www.reuters.com/rssFeed/topNews",
-        "Associated Press": "https://feeds.apnews.com/ApNews/apf-topnews",
-        "NPR": "https://feeds.npr.org/1001/rss.xml",
-        "CBS News": "https://www.cbsnews.com/latest/rss/main"
-    },
-    
-    "🏈 SPORTS": {
-        "ESPN": "https://www.espn.com/espn/rss/news",
-        "Fox Sports": "https://api.foxsports.com/v1/rss?partnerKey=zBaFxRyGKCfxBagJG9b8pqLyndmvo7UU",
-        "Sports Illustrated": "https://www.si.com/rss/si_topstories.rss",
-        "Bleacher Report": "https://bleacherreport.com/articles/feed",
-        "The Athletic": "https://theathletic.com/rss/",
-        "Yahoo Sports": "https://sports.yahoo.com/rss/",
-        "CBS Sports": "https://www.cbssports.com/rss/headlines",
-        "NFL": "https://www.nfl.com/feeds/rss/news",
-        "NBA": "https://www.nba.com/rss/nba_rss.xml"
-    },
-    
-    "🎬 ENTERTAINMENT": {
-        "Entertainment Weekly": "https://ew.com/feed/",
-        "Variety": "https://variety.com/feed/",
-        "The Hollywood Reporter": "https://www.hollywoodreporter.com/feed/",
-        "Rolling Stone": "https://www.rollingstone.com/feed/",
-        "Billboard": "https://www.billboard.com/feed/"
-    }
-} # This was the missing closing brace for the RSS_FEEDS dict inside the string!
-''' # This was the missing closing triple quote for the string!
-    return monitoring_script
 
 # To run the Gradio app:
 if __name__ == "__main__":
