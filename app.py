@@ -247,36 +247,44 @@ def fetch_all_feeds_parallel() -> Dict[str, Dict[str, FeedData]]:
     return all_results
 
 def get_article_preview(article: Article, preview_lines: int = 3) -> str:
-    """Generates a concise preview of an article."""
-    title_line = f"Title: {article.title}"
-    info_line = f"Source: {article.feed_name} - {article.published} (Author: {article.author})"
+    """Generates a concise preview of an article, including a clickable link and feed name."""
+    # Ensure no HTML tags in the summary for plain text display and truncate
+    clean_summary = gr.HTML(article.summary).value.replace('<p>', '').replace('</p>', '').strip()
     
-    # Split summary into words and take enough to fill 3 lines, then truncate
-    summary_words = article.summary.split()
-    preview_words = []
+    # Use Markdown for clickable link
+    title_line = f"**[{article.title}]({article.link})**"
+    
+    # Clearly identify the feed name
+    info_line = f"**Feed:** {article.feed_name} - {article.published} (Author: {article.author})"
+    
+    # Simple character-based truncation for summary preview
+    max_chars_per_line = 90 
+    summary_preview_words = []
     current_length = 0
+    line_count = 0
+
+    for word in clean_summary.split():
+        if current_length + len(word) + 1 <= max_chars_per_line:
+            summary_preview_words.append(word)
+            current_length += len(word) + 1
+        else:
+            line_count += 1
+            if line_count >= preview_lines - 1: # -1 because title and info already take two lines
+                break
+            summary_preview_words.append("\n" + word) # Add newline
+            current_length = len(word) + 1
     
-    # Estimate characters per line (adjust as needed for Gradio's textbox width)
-    # A typical line might hold 80-100 characters. 3 lines = 240-300 chars.
-    # This is a heuristic; actual line breaks depend on font, size, and box width.
-    target_chars_per_line = 90
-    
-    for word in summary_words:
-        if current_length + len(word) + 1 > preview_lines * target_chars_per_line:
-            break
-        preview_words.append(word)
-        current_length += len(word) + 1 # +1 for space
-    
-    summary_preview = " ".join(preview_words)
-    if len(summary_preview) < len(article.summary):
+    summary_preview = " ".join(summary_preview_words).strip()
+    if len(summary_preview) < len(clean_summary): # Check if original summary was longer
         summary_preview += "..." # Indicate truncation
 
     return f"{title_line}\n{info_line}\nSummary: {summary_preview}"
 
+
 def update_all_feed_tabs() -> Tuple[Any, ...]:
     """
-    Fetches all feeds and updates the Gradio HTML components for each category tab.
-    Returns a tuple of gr.HTML components, one for each category.
+    Fetches all feeds and updates the Gradio Textbox components for each category tab.
+    Returns a tuple of gr.Textbox components, one for each category.
     """
     global GLOBAL_ARTICLE_CACHE
     all_feed_data_by_category = fetch_all_feeds_parallel()
@@ -291,7 +299,7 @@ def update_all_feed_tabs() -> Tuple[Any, ...]:
         
         for feed_name, feed_data in category_feeds.items():
             if feed_data.status == "error":
-                feed_outputs_for_category += f"**{feed_name}**: <span style='color:red;'>Error: {feed_data.error}</span>\n\n"
+                feed_outputs_for_category += f"**{feed_name}**: Error: {feed_data.error}\n\n"
             elif not feed_data.articles:
                 feed_outputs_for_category += f"**{feed_name}**: No articles found.\n\n"
             else:
@@ -299,23 +307,42 @@ def update_all_feed_tabs() -> Tuple[Any, ...]:
                 # This ensures Ollama has full summaries, even if we only display 5
                 category_articles_for_cache.extend(feed_data.articles) 
                 
-                # Display only the 5 most recent articles
-                display_articles = sorted(feed_data.articles, key=lambda x: x.published, reverse=True)[:5]
+                # Sort articles by published date (if available) and take the top 5
+                # Ensure 'published' is parseable for sorting. If not, fallback.
+                def get_sort_key(article):
+                    try:
+                        # Attempt to parse as the standard format we use
+                        return datetime.strptime(article.published, "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        try:
+                            # Attempt to parse common RSS date formats
+                            parsed_date = feedparser._parse_date(article.published)
+                            if parsed_date:
+                                return datetime(*parsed_date[:6])
+                        except Exception:
+                            pass
+                        return datetime.min # Fallback for unparseable dates
+
+                display_articles = sorted(feed_data.articles, key=get_sort_key, reverse=True)[:5]
                 
                 feed_content = "\n\n---\n\n".join([get_article_preview(art) for art in display_articles])
-                feed_outputs_for_category += f"**{feed_name}**\n\n{feed_content}\n\n"
+                feed_outputs_for_category += f"{feed_content}\n\n" # Removed bolding on feed_name here as it's in get_article_preview
 
         # Store all fetched articles (full content) for this category in the global cache
         GLOBAL_ARTICLE_CACHE[category_name] = category_articles_for_cache
         
-        # Append the HTML for the current category's tab. Use gr.Textbox for scrolling.
-        outputs.append(gr.Textbox(value=feed_outputs_for_category.strip(), label=f"{category_name} News", lines=10, max_lines=20, interactive=False))
+        # Append the Textbox component update for the current category's tab.
+        outputs.append(gr.Textbox(value=feed_outputs_for_category.strip()))
         
     return tuple(outputs)
 
+
 def list_cached_categories() -> gr.Dropdown:
     """Returns an updated Gradio Dropdown component with cached categories."""
-    return gr.Dropdown(choices=list(GLOBAL_ARTICLE_CACHE.keys()), label="Select Cached Category for Insights")
+    current_cached_categories = list(GLOBAL_ARTICLE_CACHE.keys())
+    # Preserve the current value if it's still in the choices, otherwise set to None
+    return gr.Dropdown(choices=current_cached_categories, 
+                       value=None) # Set initial value to None for clarity on refresh
 
 
 # --- Ollama Integration ---
@@ -375,6 +402,11 @@ print(f"Available Ollama Models: {ollama_available_models}")
 def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_model: str, chat_history: List[List[str]]) -> Tuple[List[List[str]], str]:
     """Generates insights from cached RSS articles using Ollama, maintaining chat history."""
     
+    if not selected_category: # Handle case where no category is selected initially
+        response_text = "Please select a category from the 'Select Cached Category for Insights' dropdown."
+        chat_history.append([user_query, response_text])
+        return chat_history, ""
+
     if "Error" in ollama_model or "No models available" in ollama_model:
         error_message = f"Cannot generate insights: {ollama_model}. Please select a valid Ollama model and ensure Ollama server is running."
         chat_history.append([user_query, error_message])
@@ -433,19 +465,17 @@ def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_
 with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
     gr.Markdown("# Advanced RSS Feed Viewer & AI Assistant")
 
+    # Define all the Textbox components that will be updated
+    category_html_outputs: Dict[str, gr.Textbox] = {}
+
     with gr.Tab("RSS Feed Browser"):
         gr.Markdown("## Latest News Across Categories")
         fetch_all_button = gr.Button("Fetch All Feeds (This may take a moment)")
         
-        # Dictionary to hold output components for each category's feeds
-        # This allows us to dynamically update them.
-        category_html_outputs = {}
         with gr.Tabs() as category_tabs:
             for category_name in RSS_FEEDS.keys():
                 with gr.Tab(category_name, id=f"tab_{category_name.replace(' ', '_').replace('&', 'and').lower()}"):
                     # Initialize Textbox components for each category
-                    # We will update these on button click
-                    # Set a default value to indicate loading or no data
                     category_html_outputs[category_name] = gr.Textbox(
                         label=f"Articles for {category_name}",
                         lines=10, 
@@ -463,10 +493,12 @@ with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
                 value=default_ollama_model,
                 interactive=True
             )
-            # This dropdown will be populated with categories that have been fetched
+            # Initialize with all possible categories from RSS_FEEDS keys
+            # Set value to None initially to avoid "value not in choices" error
             cached_category_dropdown = gr.Dropdown(
                 label="Select Cached Category for Insights",
-                choices=[], 
+                choices=list(RSS_FEEDS.keys()), # Initial choices from RSS_FEEDS keys
+                value=None, # Set initial value to None
                 interactive=True
             )
         
@@ -483,13 +515,12 @@ with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
 
 
     # Link the "Fetch All Feeds" button to update all category tabs and the cached categories dropdown
-    # We need to map the output components dynamically
     fetch_all_button.click(
         update_all_feed_tabs,
         inputs=[],
         outputs=list(category_html_outputs.values()) # Pass all textbox components as outputs
     ).success(
-        list_cached_categories,
+        list_cached_categories, # This function will update the choices AND value of cached_category_dropdown
         inputs=[],
         outputs=[cached_category_dropdown]
     )
