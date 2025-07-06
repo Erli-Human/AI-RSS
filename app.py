@@ -98,7 +98,7 @@ RSS_FEEDS = {
         "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
         "CNN": "http://rss.cnn.com/rss/edition.rss",
         "New York Times": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
-        "The Guardian": "https://www.theguardian.com/world/rss",
+        "The Guardian": "https://www.guardian.com/world/rss",
         "Washington Post": "https://feeds.washingtonpost.com/rss/world",
         "Google News": "https://news.google.com/rss",
         "NPR": "https://feeds.npr.org/1001/rss.xml",
@@ -638,8 +638,8 @@ RSS_FEEDS = {
         "Rolling Stone": "https://www.rollingstone.com/feed/",
         "Billboard": "https://www.billboard.com/feed/"
     }
-}
-    # ... (rest of create_monitoring_script, which is a string and won't be modified by this change)
+} # This was the missing closing brace for the RSS_FEEDS dict inside the string!
+''' # This was the missing closing triple quote for the string!
     return monitoring_script
 
 # To run the Gradio app:
