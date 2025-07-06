@@ -37,7 +37,7 @@ class FeedData:
 # RSS Feed Sources - UPDATED WITH YOUR NEW LIST
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
-        "Science Daily - AI":    
+        "Science Daily - AI":   
         "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
         "Science Daily - Technology": 
         "https://www.sciencedaily.com/rss/top/technology.xml",
@@ -274,23 +274,10 @@ def create_enhanced_rss_viewer():
             if not articles:
                 html += "<p>No articles available for this feed.</p>"
             else:
-                # Sort articles by published date for the preview (most recent first)
-                try:
-                    # Filter out articles with 'Unknown date' or non-parseable dates for sorting
-                    parseable_articles = [
-                        a for a in articles 
-                        if a.published != 'Unknown date'
-                        # A more robust date parsing for sorting can be added here if needed
-                        # For now, relying on the 'published_parsed' from feedparser is complex without re-parsing
-                        # For simple string dates, simple string comparison might work for YYYY-MM-DD HH:MM:SS
-                    ]
-                    parseable_articles.sort(key=lambda x: x.published, reverse=True) # Assuming string format allows sorting
-                    sorted_articles = parseable_articles
-                except Exception as e:
-                    print(f"Warning: Could not sort articles for feed {feed_name} by date. Error: {e}")
-                    sorted_articles = articles # Fallback to unsorted if sort fails
+                # Removed the sorting of articles
+                displayed_articles = articles[:num_articles_per_feed]
 
-                for article in sorted_articles[:num_articles_per_feed]: # Take only the top N
+                for article in displayed_articles: # Take only the top N (now unsorted)
                     html += f"""
                     <div style='border: 1px solid #eee; margin: 10px 0; padding: 10px; border-radius: 5px; background-color: #fff;'>
                         <h4><a href='{article.link}' target='_blank' style='color: #2196F3; text-decoration: none;'>{article.title}</a></h4>
@@ -533,7 +520,7 @@ class FeedData:
 # RSS Feed Sources - Matches the main app's RSS_FEEDS
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
-        "Science Daily - AI":    
+        "Science Daily - AI":   
         "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
         "Science Daily - Technology": 
         "https://www.sciencedaily.com/rss/top/technology.xml",
