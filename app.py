@@ -169,7 +169,7 @@ def fetch_rss_feed(url: str) -> List[Dict[str, str]]:
         print(f"Error fetching RSS feed from {url}: {e}")
         return []
 
-# --- Ollama Integration (FIXED) ---
+# --- Ollama Integration (CRITICAL FIXES HERE) ---
 def get_ollama_models() -> List[str]:
     """
     Fetches a list of available Ollama models.
@@ -178,14 +178,18 @@ def get_ollama_models() -> List[str]:
     try:
         print(f"[{datetime.now()}] Attempting to list Ollama models...")
         models_info = ollama.list()
-        print(f"[{datetime.now()}] Raw Ollama list response: {models_info}")
+        print(f"[{datetime.now()}] Raw Ollama list response: {models_info}") # THIS IS KEY FOR DEBUGGING
 
+        # --- FIX 1: Access 'models' as an attribute, not a dictionary key ---
+        # The ollama.list() returns an ollama._types.ListResponse object,
+        # which has a 'models' attribute (a list of Model objects).
         if not hasattr(models_info, 'models'):
             print(f"[{datetime.now()}] Error: Ollama list response object missing 'models' attribute. Response: {models_info}")
             return ["Error: Ollama response malformed (missing 'models' attribute)."]
 
-        model_list = models_info.models # Access as an attribute, not a dictionary key
+        model_list = models_info.models # Corrected: Access as an attribute
 
+        # Ensure that the 'models' attribute is indeed a list
         if not isinstance(model_list, list):
             print(f"[{datetime.now()}] Error: 'models' attribute is not a list. Type: {type(model_list)}. Value: {model_list}")
             return ["Error: Ollama response malformed ('models' attribute not a list)."]
@@ -196,17 +200,18 @@ def get_ollama_models() -> List[str]:
 
         models = []
         for i, model_entry in enumerate(model_list):
+            # --- FIX 2: Each model_entry is an ollama._types.Model object, access 'model' as an attribute ---
             if not hasattr(model_entry, 'model'): # Check for 'model' attribute, which holds the name string
                 print(f"[{datetime.now()}] Warning: Model entry at index {i} missing 'model' attribute. Skipping. Entry: {model_entry}")
                 continue
             
-            models.append(model_entry.model) # Access as an attribute
+            models.append(model_entry.model) # Corrected: Access as an attribute
 
         if not models:
             print(f"[{datetime.now()}] No valid model names extracted after processing Ollama list response.")
             return ["No valid model names extracted."]
 
-        return sorted(list(set(models)))
+        return sorted(list(set(models))) # Use set for uniqueness, then sort
 
     except ConnectionRefusedError:
         print(f"[{datetime.now()}] Error: Connection refused. Is Ollama server running on 127.0.0.1:11434 and accessible?")
@@ -227,7 +232,13 @@ def generate_insights_ollama(sales_data_string: str, query: str, ollama_model: s
     if "Error" in ollama_model: # Check if the selected model is an error message
         return f"Cannot generate insights: {ollama_model}. Please select a valid Ollama model."
     
+    if not sales_data_string:
+        return "No sales data uploaded. Please upload a CSV file first."
+
     records = parse_sales_data(sales_data_string)
+    if not records:
+        return "No valid sales records parsed from the uploaded data. Please check the CSV format."
+
     analysis_results = analyze_data(records)
     
     prompt_data = {
@@ -278,7 +289,7 @@ with gr.Blocks() as demo:
 
     with gr.Tab("Data Upload & Analysis"):
         with gr.Row():
-            # FIXED: Changed type="file" to type="filepath"
+            # --- CRITICAL FIX 3: Changed type="file" to type="filepath" ---
             file_upload = gr.File(label="Upload CSV Sales Data", type="filepath")
             data_preview = gr.DataFrame(label="Data Preview")
         
@@ -310,25 +321,36 @@ with gr.Blocks() as demo:
     file_content_state = gr.State(None)
     parsed_records_state = gr.State([])
 
-    # FIXED: Modified handle_file_upload to read from filepath
-    def handle_file_upload(file_path: str):
+    # --- CRITICAL FIX 4: Modified handle_file_upload to read from filepath ---
+    def handle_file_upload(file_path: str): # Gradio now provides the file path string
         if file_path is None:
             return None, None
         
-        with open(file_path, 'r', encoding='utf-8') as f:
-            file_content = f.read()
-        
-        df_preview = pd.read_csv(StringIO(file_content))
-        return file_content, df_preview.head(5)
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f: # Open the file from the path
+                file_content = f.read()
+            
+            # Use StringIO to read the content as if it were a file
+            df_preview = pd.read_csv(StringIO(file_content))
+            return file_content, df_preview.head(5) # Pass raw content and a preview
+        except Exception as e:
+            print(f"Error handling file upload: {e}")
+            return None, pd.DataFrame({"Error": [f"Could not read file: {e}"]})
+
 
     def run_analysis(file_content: str):
         if file_content is None:
-            return 0, 0, 0, {}, {}, [], "No file uploaded.", []
+            # Return default/empty values if no file content
+            return 0, 0, 0, {}, {}, [], "No file uploaded or file could not be read.", []
 
         records = parse_sales_data(file_content)
+        if not records:
+            return 0, 0, 0, {}, {}, [], "No valid records parsed. Check CSV format.", []
+
         analysis_results = analyze_data(records)
         plot_html = plot_data(records)
 
+        # Convert list of dataclass objects to list of dictionaries for JSON output
         daily_summaries_dict = [ds.__dict__ for ds in analysis_results["daily_summaries"]]
         
         return (
@@ -339,7 +361,7 @@ with gr.Blocks() as demo:
             analysis_results["sales_by_region"],
             daily_summaries_dict,
             plot_html,
-            records
+            records # Pass the parsed records to state for Ollama and scheduler
         )
 
 
@@ -356,7 +378,7 @@ with gr.Blocks() as demo:
             sales_by_region_output,
             daily_summaries_output,
             plot_output,
-            parsed_records_state
+            parsed_records_state # Ensure parsed records are stored in state
         ]
     )
 
@@ -384,6 +406,7 @@ with gr.Blocks() as demo:
         fetch_rss_button = gr.Button("Fetch RSS Feed")
         rss_output = gr.JSON(label="RSS Feed Articles")
         
+        # Scheduler thread management (important for background tasks in Gradio)
         scheduler_thread = None
         scheduler_stop_event = threading.Event()
 
@@ -391,7 +414,7 @@ with gr.Blocks() as demo:
             global scheduler_thread
             if scheduler_thread is None or not scheduler_thread.is_alive():
                 scheduler_stop_event.clear()
-                scheduler_thread = threading.Thread(target=run_scheduler, args=(scheduler_stop_event,))
+                scheduler_thread = threading.Thread(target=run_scheduler, args=(scheduler_stop_event,), daemon=True) # daemon=True allows thread to exit with main app
                 scheduler_thread.start()
                 return "Scheduler started."
             return "Scheduler is already running."
@@ -400,18 +423,19 @@ with gr.Blocks() as demo:
             global scheduler_thread
             if scheduler_thread and scheduler_thread.is_alive():
                 scheduler_stop_event.set()
-                scheduler_thread.join(timeout=5)
+                scheduler_thread.join(timeout=5) # Wait for thread to finish, with a timeout
                 return "Scheduler stopped."
             return "Scheduler is not running."
 
         def run_scheduler(stop_event: threading.Event):
+            """Continuously runs scheduled jobs until stop_event is set."""
             while not stop_event.is_set():
                 schedule.run_pending()
-                time.sleep(1)
+                time.sleep(1) # Check every second
 
         def schedule_email_report_action(
             email_address: str, subject: str, smtp_server: str, smtp_port: int, smtp_user: str, smtp_password: str,
-            schedule_time: str, records_from_state: List[SalesRecord]
+            schedule_time: str, records_from_state: List[SalesRecord] # Records passed from the state
         ):
             if not records_from_state:
                 return "No sales data available to schedule report. Please upload and analyze data first."
@@ -434,16 +458,21 @@ with gr.Blocks() as demo:
             {json.dumps([ds.__dict__ for ds in analysis_results['daily_summaries']], indent=2)}
             """
             
-            def job():
+            # The actual job function that will be scheduled
+            def email_job():
                 print(f"Attempting to send scheduled email at {datetime.now().strftime('%H:%M:%S')}")
                 send_result = send_email(email_address, subject, email_body, smtp_server, smtp_port, smtp_user, smtp_password)
                 print(f"Scheduled email send result: {send_result}")
-                return send_result
+                # Note: Returning a value from a scheduled job isn't directly passed back to Gradio UI unless explicitly handled.
+                # The print statements are for console feedback.
 
-            schedule.clear('daily_report_job') 
-            schedule.every().day.at(schedule_time).do(job).tag('daily_report_job')
-            start_scheduler_thread()
-            return f"Email report scheduled for {schedule_time} daily."
+            schedule.clear('daily_report_job') # Clear any existing jobs with this tag
+            try:
+                schedule.every().day.at(schedule_time).do(email_job).tag('daily_report_job')
+                start_scheduler_thread() # Ensure the scheduler thread is running
+                return f"Email report scheduled for {schedule_time} daily. Scheduler is running in background."
+            except Exception as e:
+                return f"Failed to schedule email: {e}. Ensure time format is HH:MM."
 
         schedule_button.click(
             schedule_email_report_action,
