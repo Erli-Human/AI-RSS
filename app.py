@@ -40,9 +40,9 @@ class FeedData:
 # RSS Feed Sources
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
-        "Science Daily - AI":   
+        "Science Daily - AI":    
         "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
-        "Science Daily - Technology":  
+        "Science Daily - Technology":   
         "https://www.sciencedaily.com/rss/top/technology.xml",
         "OpenAI Blog": "https://openai.com/blog/rss.xml",
         "DeepMind Blog": "https://deepmind.com/blog/feed/basic/",
@@ -510,7 +510,7 @@ def create_enhanced_rss_viewer():
     OLLAMA_MODELS = get_ollama_models()
     
     # Set preferred model, ensure it's in the list, otherwise fallback to first available
-    preferred_ollama_model = 'llama3.2-vision'
+    preferred_ollama_model = 'gemma3n:e4b' # <--- THIS IS THE MODIFIED LINE
     if preferred_ollama_model in OLLAMA_MODELS:
         default_ollama_model = preferred_ollama_model
     elif OLLAMA_MODELS:
@@ -564,7 +564,7 @@ def create_enhanced_rss_viewer():
                                 outputs=articles_html_output # This needs to point to the *currently active* HTML output. This is tricky with dynamic tabs.
                                                 # A simpler approach for the active_category for chat is to rely on user selection in the chat dropdown.
                             )
-            
+                
             with gr.TabItem("Chat with RSS 💬"): # New tab for chat
                 with gr.Column(scale=1): # Right column for Chat with RSS
                     gr.Markdown("## 💬 Chat with RSS Feeds")
