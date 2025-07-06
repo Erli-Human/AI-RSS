@@ -3,11 +3,10 @@ import json
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import pandas as pd
-import io
 from io import StringIO, BytesIO
 import base64
-from typing import List, Tuple, Dict, Any, Optional
-from dataclasses import dataclass, field
+from typing import Dict, Any, List, Tuple, Optional
+from dataclasses import dataclass, field, asdict
 import gradio as gr
 import schedule
 import time
@@ -15,7 +14,7 @@ import smtplib
 from email.mime.text import MIMEText
 import feedparser
 import requests
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import ollama # Import the ollama library
 import os
@@ -40,7 +39,160 @@ class SalesRecord:
     price: float
     region: str
 
-# --- Helper Functions ---
+@dataclass
+class Article:
+    title: str
+    link: str
+    published: str
+    summary: str
+    author: str = ""
+    feed_name: str = ""
+
+@dataclass
+class FeedData:
+    status: str
+    articles: List[Article]
+    last_updated: str
+    error: str = ""
+
+# RSS Feed Sources
+RSS_FEEDS = {
+    "🤖 AI & MACHINE LEARNING": {
+        "Science Daily - AI":
+        "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
+        "Science Daily - Technology":
+        "https://www.sciencedaily.com/rss/top/technology.xml",
+        "OpenAI Blog": "https://openai.com/blog/rss.xml",
+        "DeepMind Blog": "https://deepmind.com/blog/feed/basic/",
+        "Microsoft AI Blog": "https://blogs.microsoft.com/ai/feed/",
+        "Machine Learning Mastery": "https://machinelearningmastery.com/feed/",
+        "MarkTechPost": "https://www.marktechpost.com/feed/",
+        "Berkeley AI Research": "https://bair.berkeley.edu/blog/feed.xml",
+        "Distill": "https://distill.pub/rss.xml",
+        "AI News": "https://www.artificialintelligence-news.com/feed/",
+        "MIT Technology Review": "https://www.technologyreview.com/feed/",
+        "IEEE Spectrum": "https://spectrum.ieee.org/rss/fulltext"
+    },
+
+    "💰 FINANCE & BUSINESS": {
+        "Investing.com": "https://www.investing.com/rss/news.rss",
+        "Seeking Alpha": "https://seekingalpha.com/market_currents.xml",
+        "Fortune": "https://fortune.com/feed",
+        "Forbes Business": "https://www.forbes.com/business/feed/",
+        "Economic Times": "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
+        "CNBC": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+        "Yahoo Finance": "https://finance.yahoo.com/news/rssindex",
+        "Financial Samurai": "https://www.financialsamurai.com/feed/",
+        "NerdWallet": "https://www.nerdwallet.com/blog/feed/",
+        "Bloomberg": "https://feeds.bloomberg.com/markets/news.rss"
+    },
+
+    "🔬 SCIENCE & PHYSICS": {
+        "Phys.org": "https://phys.org/rss-feed/",
+        "Nature": "https://www.nature.com/nature.rss",
+        "Physical Review Letters": "https://feeds.aps.org/rss/recent/prl.xml",
+        "New Scientist": "https://www.newscientist.com/feed/home/",
+        "Physics World": "https://physicsworld.com/feed/",
+        "Space.com": "https://www.space.com/feeds/all",
+        "NASA Breaking News": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
+        "Sky & Telescope": "https://www.skyandtelescope.com/feed/",
+        "Science Daily": "https://www.sciencedaily.com/rss/all.xml"
+    },
+
+    "💻 TECHNOLOGY": {
+        "TechCrunch": "https://techcrunch.com/feed/",
+        "The Verge": "https://www.theverge.com/rss/index.xml",
+        "Ars Technica": "https://arstechnica.com/feed/",
+        "Wired": "https://www.wired.com/feed/rss",
+        "Gizmodo": "https://gizmodo.com/rss",
+        "Engadget": "https://www.engadget.com/rss.xml",
+        "Hacker News": "https://news.ycombinator.com/rss",
+        "Slashdot": "https://slashdot.org/slashdot.rss",
+        "Reddit Technology": "https://www.reddit.com/r/technology/.rss",
+        "The Next Web": "https://thenextweb.com/feed/",
+        "ZDNet": "https://www.zdnet.com/news/rss.xml",
+        "TechRadar": "https://www.techradar.com/rss"
+    },
+
+    "📰 GENERAL NEWS": {
+        "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
+        "CNN": "http://rss.cnn.com/rss/edition.rss",
+        "New York Times": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+        "The Guardian": "https://www.theguardian.com/world/rss",
+        "Washington Post": "https://feeds.washingtonpost.com/rss/world",
+        "Google News": "https://news.google.com/rss",
+        "NPR": "https://feeds.npr.org/1001/rss.xml",
+        "CBS News": "https://www.cbsnews.com/latest/rss/main"
+    },
+
+    "🏈 SPORTS": {
+        "ESPN": "https://www.espn.com/espn/rss/news",
+        "Fox Sports": "https://api.foxsports.com/v1/rss?partnerKey=zBaFxRyGKCfxBagJG9b8pqLyndmvo7UU",
+        "The Athletic": "https://theathletic.com/rss/",
+        "Yahoo Sports": "https://sports.yahoo.com/rss/",
+        "CBS Sports": "https://www.cbssports.com/rss/headlines"
+    },
+
+    "🎬 ENTERTAINMENT": {
+        "Variety": "https://variety.com/feed/",
+        "The Hollywood Reporter": "https://www.hollywoodreporter.com/feed/",
+        "Rolling Stone": "https://www.rollingstone.com/feed/",
+        "Billboard": "https://www.billboard.com/feed/",
+        "IGN": "https://feeds.ign.com/ign/all",
+        "GameSpot": "https://www.gamespot.com/feeds/mashup/",
+        "Polygon": "https://www.polygon.com/rss/index.xml"
+    },
+
+    "🏥 HEALTH & MEDICINE": {
+        "Mayo Clinic": "https://newsnetwork.mayoclinic.org/feed/",
+        "CDC": "https://tools.cdc.gov/api/v2/resources/media/132608.rss"
+    },
+
+    "🔗 BLOCKCHAIN & CRYPTO": {
+        "CoinTelegraph": "https://cointelegraph.com/rss",
+        "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "Decrypt": "https://decrypt.co/feed",
+        "The Block": "https://www.theblockcrypto.com/rss.xml",
+        "Bitcoin Magazine": "https://bitcoinmagazine.com/.rss/full/"
+    },
+
+    "📊 DATA SCIENCE": {
+        "KDnuggets": "https://www.kdnuggets.com/feed",
+        "Analytics Vidhya": "https://www.analyticsvidhya.com/feed/",
+        "Towards Data Science": "https://towardsdatascience.com/feed"
+    },
+
+    "🌍 WORLD NEWS": {
+        "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
+        "Deutsche Welle": "https://rss.dw.com/rdf/rss-en-all",
+        "RT": "https://www.rt.com/rss/",
+        "Times of India": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
+    },
+
+    "🍔 FOOD & COOKING": {
+        "Bon Appétit": "https://www.bonappetit.com/feed/rss",
+        "Serious Eats": "https://feeds.feedburner.com/seriouseats/recipes"
+    },
+
+    "🎨 DESIGN & CREATIVITY": {
+        "Behance": "https://feeds.feedburner.com/behance/vorr",
+        "Dribbble": "https://dribbble.com/shots/popular.rss",
+        "Creative Bloq": "https://www.creativebloq.com/feed",
+        "Smashing Magazine": "https://www.smashingmagazine.com/feed/"
+    },
+
+    "🌱 ENVIRONMENT & SUSTAINABILITY": {
+        "Green Tech Media": "https://www.greentechmedia.com/rss/all"
+    }
+}
+
+# Global cache for fetched articles to enable chat functionality
+GLOBAL_ARTICLE_CACHE: Dict[str, List[Article]] = {}
+# Global variable to store available Ollama models
+OLLAMA_MODELS: List[str] = []
+
+
+# --- Helper Functions (Sales Data) ---
 def parse_sales_data(file_content: str) -> List[SalesRecord]:
     records = []
     f = StringIO(file_content)
@@ -69,7 +221,7 @@ def analyze_data(records: List[SalesRecord]) -> Dict[str, Any]:
             "total_sales": 0,
             "total_transactions": 0,
             "average_transaction_value": 0,
-            "top_products": [],
+            "top_products": {}, # Changed from [] to {} for consistency with dict output
             "sales_by_region": {},
             "daily_summaries": []
         }
@@ -153,23 +305,131 @@ def send_email(to_address: str, subject: str, body: str, smtp_server: str, smtp_
     except Exception as e:
         return f"Failed to send email: {e}"
 
-def fetch_rss_feed(url: str) -> List[Dict[str, str]]:
+# --- RSS Feed Functions ---
+def fetch_rss_feed_single(url: str, feed_name: str, timeout: int = 10) -> FeedData:
+    """Fetch and parse a single RSS feed."""
     try:
-        feed = feedparser.parse(url)
+        # Set user agent to avoid blocking
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        response = requests.get(url, headers=headers, timeout=timeout)
+        response.raise_for_status()
+
+        feed = feedparser.parse(response.content)
+
+        if feed.bozo and feed.bozo_exception:
+            return FeedData(
+                status="error",
+                articles=[],
+                last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                error=f"Feed parsing error: {feed.bozo_exception}"
+            )
+
         articles = []
         for entry in feed.entries:
-            articles.append({
-                'title': entry.title,
-                'link': entry.link,
-                'published': entry.published if hasattr(entry, 'published') else 'N/A',
-                'summary': entry.summary if hasattr(entry, 'summary') else 'No summary available.'
-            })
-        return articles
-    except Exception as e:
-        print(f"Error fetching RSS feed from {url}: {e}")
-        return []
+            article = Article(
+                title=entry.get('title', 'No title'),
+                link=entry.get('link', ''),
+                published=entry.get('published', 'Unknown date'),
+                summary=entry.get('summary', 'No summary available')[:200] + "...",
+                author=entry.get('author', 'Unknown author'),
+                feed_name=feed_name # Store the feed name with the article
+            )
+            articles.append(article)
 
-# --- Ollama Integration (CRITICAL FIXES HERE) ---
+        return FeedData(
+            status="success",
+            articles=articles,
+            last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        )
+
+    except requests.exceptions.RequestException as e:
+        return FeedData(
+            status="error",
+            articles=[],
+            last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            error=f"Network error: {str(e)}"
+        )
+    except Exception as e:
+        return FeedData(
+            status="error",
+            articles=[],
+            last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            error=f"Unexpected error: {str(e)}"
+        )
+
+def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[str, FeedData]:
+    """Fetch all feeds in a category using parallel processing."""
+    if category not in RSS_FEEDS:
+        return {}
+
+    feeds = RSS_FEEDS[category]
+    results = {}
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_feed = {
+            executor.submit(fetch_rss_feed_single, url, name): name
+            for name, url in feeds.items()
+        }
+
+        for future in as_completed(future_to_feed):
+            feed_name = future_to_feed[future]
+            try:
+                results[feed_name] = future.result()
+            except Exception as e:
+                results[feed_name] = FeedData(
+                    status="error",
+                    articles=[],
+                    last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    error=f"Processing error: {str(e)}"
+                )
+
+    return results
+
+def get_article_display(feed_data: FeedData) -> str:
+    if feed_data.status == "error":
+        return f"<p style='color:red;'>Error fetching feed: {feed_data.error}</p>"
+    if not feed_data.articles:
+        return "<p>No articles found for this feed.</p>"
+
+    html_output = "<ul>"
+    for article in feed_data.articles:
+        html_output += f"""
+        <li>
+            <strong><a href="{article.link}" target="_blank">{article.title}</a></strong>
+            <br>
+            <em>{article.feed_name}</em> - {article.published} (Author: {article.author})
+            <br>
+            {article.summary}
+        </li>
+        """
+    html_output += "</ul>"
+    return html_output
+
+def display_rss_feed_category(category_name: str) -> gr.HTML:
+    """Displays articles for a selected category and caches them."""
+    global GLOBAL_ARTICLE_CACHE
+    all_category_articles: List[Article] = []
+    category_results = fetch_category_feeds_parallel(category_name)
+    
+    output_html = ""
+    for feed_name, feed_data in category_results.items():
+        output_html += f"<h3>{feed_name}</h3>"
+        output_html += get_article_display(feed_data)
+        if feed_data.status == "success":
+            all_category_articles.extend(feed_data.articles)
+    
+    GLOBAL_ARTICLE_CACHE[category_name] = all_category_articles
+    return gr.HTML(output_html)
+
+def list_cached_categories() -> List[str]:
+    """Returns a list of categories currently in the cache."""
+    return list(GLOBAL_ARTICLE_CACHE.keys())
+
+
+# --- Ollama Integration ---
 def get_ollama_models() -> List[str]:
     """
     Fetches a list of available Ollama models.
@@ -180,7 +440,6 @@ def get_ollama_models() -> List[str]:
         models_info = ollama.list()
         print(f"[{datetime.now()}] Raw Ollama list response: {models_info}") # THIS IS KEY FOR DEBUGGING
 
-        # --- FIX 1: Access 'models' as an attribute, not a dictionary key ---
         # The ollama.list() returns an ollama._types.ListResponse object,
         # which has a 'models' attribute (a list of Model objects).
         if not hasattr(models_info, 'models'):
@@ -200,7 +459,7 @@ def get_ollama_models() -> List[str]:
 
         models = []
         for i, model_entry in enumerate(model_list):
-            # --- FIX 2: Each model_entry is an ollama._types.Model object, access 'model' as an attribute ---
+            # Each model_entry is an ollama._types.Model object, access 'model' as an attribute
             if not hasattr(model_entry, 'model'): # Check for 'model' attribute, which holds the name string
                 print(f"[{datetime.now()}] Warning: Model entry at index {i} missing 'model' attribute. Skipping. Entry: {model_entry}")
                 continue
@@ -282,17 +541,55 @@ def generate_insights_ollama(sales_data_string: str, query: str, ollama_model: s
     except Exception as e:
         return f"Error communicating with Ollama model '{ollama_model}': {e}. Ensure the model is pulled and running."
 
+def generate_rss_summary_ollama(selected_category: str, user_query: str, ollama_model: str) -> str:
+    """Generates insights from cached RSS articles using Ollama."""
+    if "Error" in ollama_model:
+        return f"Cannot generate insights: {ollama_model}. Please select a valid Ollama model."
+
+    articles_to_summarize = GLOBAL_ARTICLE_CACHE.get(selected_category, [])
+
+    if not articles_to_summarize:
+        return f"No articles found in cache for category '{selected_category}'. Please fetch the feed first."
+
+    # Prepare article data for the LLM prompt
+    articles_text = "\n\n".join([
+        f"Title: {article.title}\nSource: {article.feed_name}\nPublished: {article.published}\nSummary: {article.summary}"
+        for article in articles_to_summarize
+    ])
+
+    system_prompt = (
+        "You are an AI assistant specialized in summarizing news articles. "
+        "Provide a concise and informative response based on the provided articles. "
+        "If the user asks a specific question, try to answer it using the article content. "
+        "If a question cannot be answered from the articles, state that clearly."
+    )
+
+    user_prompt = (
+        f"Here are some recent articles from the '{selected_category}' category:\n\n"
+        f"{articles_text}\n\n"
+        f"Based on these articles, please respond to the following: \"{user_query}\""
+    )
+
+    try:
+        response = ollama.chat(model=ollama_model, messages=[
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user', 'content': user_prompt}
+        ])
+        return response['message']['content']
+    except Exception as e:
+        return f"Error communicating with Ollama model '{ollama_model}': {e}. Ensure the model is pulled and running."
+
+
 # --- Gradio Interface ---
 
 with gr.Blocks() as demo:
-    gr.Markdown("# Sales Data Analysis Dashboard")
+    gr.Markdown("# Integrated Data Analysis and News Dashboard")
 
-    with gr.Tab("Data Upload & Analysis"):
+    with gr.Tab("Sales Data Analysis"):
         with gr.Row():
-            # --- CRITICAL FIX 3: Changed type="file" to type="filepath" ---
             file_upload = gr.File(label="Upload CSV Sales Data", type="filepath")
             data_preview = gr.DataFrame(label="Data Preview")
-        
+            
         parse_button = gr.Button("Parse & Analyze Data")
         
         with gr.Accordion("Analysis Results", open=False):
@@ -302,45 +599,41 @@ with gr.Blocks() as demo:
             top_products_output = gr.JSON(label="Top 5 Products by Sales")
             sales_by_region_output = gr.JSON(label="Sales by Region")
             daily_summaries_output = gr.JSON(label="Daily Summaries")
-        
+            
         with gr.Accordion("Visualizations", open=False):
             plot_output = gr.HTML(label="Sales Trend Plot")
-
-    with gr.Tab("Ollama Insights"):
+        
+        gr.Markdown("## Sales Data Insights (powered by Ollama)")
         with gr.Row():
-            ollama_model_dropdown = gr.Dropdown(
+            ollama_model_dropdown_sales = gr.Dropdown(
                 label="Select Ollama Model",
                 choices=ollama_available_models,
                 value=default_ollama_model,
                 interactive=True
             )
             ollama_query = gr.Textbox(label="Ask a question about the sales data:", placeholder="e.g., What were the daily sales trends?")
-        ollama_generate_button = gr.Button("Generate Ollama Insights")
-        ollama_output = gr.Markdown(label="Ollama Insights")
-    
+        ollama_generate_button_sales = gr.Button("Generate Sales Insights")
+        ollama_output_sales = gr.Markdown(label="Ollama Sales Insights")
+        
     file_content_state = gr.State(None)
     parsed_records_state = gr.State([])
 
-    # --- CRITICAL FIX 4: Modified handle_file_upload to read from filepath ---
-    def handle_file_upload(file_path: str): # Gradio now provides the file path string
+    def handle_file_upload(file_path: str):
         if file_path is None:
             return None, None
-        
+            
         try:
-            with open(file_path, 'r', encoding='utf-8') as f: # Open the file from the path
+            with open(file_path, 'r', encoding='utf-8') as f:
                 file_content = f.read()
             
-            # Use StringIO to read the content as if it were a file
             df_preview = pd.read_csv(StringIO(file_content))
-            return file_content, df_preview.head(5) # Pass raw content and a preview
+            return file_content, df_preview.head(5)
         except Exception as e:
             print(f"Error handling file upload: {e}")
             return None, pd.DataFrame({"Error": [f"Could not read file: {e}"]})
 
-
     def run_analysis(file_content: str):
         if file_content is None:
-            # Return default/empty values if no file content
             return 0, 0, 0, {}, {}, [], "No file uploaded or file could not be read.", []
 
         records = parse_sales_data(file_content)
@@ -350,9 +643,8 @@ with gr.Blocks() as demo:
         analysis_results = analyze_data(records)
         plot_html = plot_data(records)
 
-        # Convert list of dataclass objects to list of dictionaries for JSON output
-        daily_summaries_dict = [ds.__dict__ for ds in analysis_results["daily_summaries"]]
-        
+        daily_summaries_dict = [asdict(ds) for ds in analysis_results["daily_summaries"]]
+            
         return (
             analysis_results["total_sales"],
             analysis_results["total_transactions"],
@@ -361,12 +653,11 @@ with gr.Blocks() as demo:
             analysis_results["sales_by_region"],
             daily_summaries_dict,
             plot_html,
-            records # Pass the parsed records to state for Ollama and scheduler
+            records
         )
 
-
     file_upload.upload(handle_file_upload, inputs=file_upload, outputs=[file_content_state, data_preview])
-    
+        
     parse_button.click(
         run_analysis,
         inputs=[file_content_state],
@@ -378,18 +669,70 @@ with gr.Blocks() as demo:
             sales_by_region_output,
             daily_summaries_output,
             plot_output,
-            parsed_records_state # Ensure parsed records are stored in state
+            parsed_records_state
         ]
     )
 
-    ollama_generate_button.click(
+    ollama_generate_button_sales.click(
         generate_insights_ollama,
-        inputs=[file_content_state, ollama_query, ollama_model_dropdown],
-        outputs=ollama_output
+        inputs=[file_content_state, ollama_query, ollama_model_dropdown_sales],
+        outputs=ollama_output_sales
     )
+
+    # --- RSS Feed Browser Tab ---
+    with gr.Tab("RSS Feed Browser"):
+        gr.Markdown("## Browse Latest News Feeds")
+        with gr.Row():
+            category_dropdown = gr.Dropdown(
+                label="Select News Category",
+                choices=list(RSS_FEEDS.keys()),
+                value=list(RSS_FEEDS.keys())[0],
+                interactive=True
+            )
+            fetch_category_button = gr.Button("Fetch Category Feeds")
+        
+        rss_articles_display = gr.HTML(label="Articles")
+
+        gr.Markdown("---")
+        gr.Markdown("## RSS Feed Insights (powered by Ollama)")
+        with gr.Row():
+            ollama_model_dropdown_rss = gr.Dropdown(
+                label="Select Ollama Model",
+                choices=ollama_available_models,
+                value=default_ollama_model,
+                interactive=True
+            )
+            # This dropdown's choices are dynamic based on what's in the cache
+            cached_category_dropdown = gr.Dropdown(
+                label="Select Cached Category for Insights",
+                choices=[], # Initial empty, updated on fetch
+                interactive=True
+            )
+        rss_ollama_query = gr.Textbox(label="Ask a question about the fetched articles:", placeholder="e.g., What are the main headlines?")
+        rss_ollama_generate_button = gr.Button("Generate RSS Insights")
+        rss_ollama_output = gr.Markdown(label="Ollama RSS Insights")
+
+        # Link RSS fetching to UI
+        fetch_category_button.click(
+            display_rss_feed_category,
+            inputs=[category_dropdown],
+            outputs=[rss_articles_display]
+        ).success(
+            fn=list_cached_categories, # After fetching, update the cached categories dropdown
+            inputs=[],
+            outputs=[cached_category_dropdown]
+        )
+        
+        # Link Ollama for RSS
+        rss_ollama_generate_button.click(
+            generate_rss_summary_ollama,
+            inputs=[cached_category_dropdown, rss_ollama_query, ollama_model_dropdown_rss],
+            outputs=rss_ollama_output
+        )
 
     # --- Scheduler Tab ---
     with gr.Tab("Scheduled Tasks"):
+        gr.Markdown("## Automated Reports & Notifications")
         with gr.Row():
             email_address_input = gr.Textbox(label="Recipient Email", placeholder="your_email@example.com")
             email_subject_input = gr.Textbox(label="Email Subject", placeholder="Daily Sales Report")
@@ -397,15 +740,11 @@ with gr.Blocks() as demo:
             smtp_port_input = gr.Number(label="SMTP Port", value=587)
             smtp_user_input = gr.Textbox(label="SMTP Username", placeholder="your_smtp_username")
             smtp_password_input = gr.Textbox(label="SMTP Password", type="password", placeholder="your_smtp_password")
-        
+            
         schedule_time_input = gr.Textbox(label="Schedule Time (HH:MM)", placeholder="e.g., 09:00 for 9 AM")
         schedule_button = gr.Button("Schedule Email Report")
         scheduler_status = gr.Textbox(label="Scheduler Status", interactive=False)
 
-        rss_url_input = gr.Textbox(label="RSS Feed URL", placeholder="e.g., https://www.nytimes.com/services/xml/rss/nyt/HomePage.xml")
-        fetch_rss_button = gr.Button("Fetch RSS Feed")
-        rss_output = gr.JSON(label="RSS Feed Articles")
-        
         # Scheduler thread management (important for background tasks in Gradio)
         scheduler_thread = None
         scheduler_stop_event = threading.Event()
@@ -455,7 +794,7 @@ with gr.Blocks() as demo:
             {json.dumps(analysis_results['sales_by_region'], indent=2)}
 
             Daily Summaries:
-            {json.dumps([ds.__dict__ for ds in analysis_results['daily_summaries']], indent=2)}
+            {json.dumps([asdict(ds) for ds in analysis_results['daily_summaries']], indent=2)}
             """
             
             # The actual job function that will be scheduled
@@ -481,12 +820,6 @@ with gr.Blocks() as demo:
                 smtp_user_input, smtp_password_input, schedule_time_input, parsed_records_state
             ],
             outputs=scheduler_status
-        )
-        
-        fetch_rss_button.click(
-            fetch_rss_feed,
-            inputs=rss_url_input,
-            outputs=rss_output
         )
 
 # Launch the Gradio app
