@@ -6,3 +6,4 @@ matplotlib==3.8.2
 pandas==2.1.4
 schedule>=1.2.0
 ollama
+beautifulsoup4
