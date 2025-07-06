@@ -286,7 +286,7 @@ def create_enhanced_rss_viewer():
                 parsed_date = feedparser._parse_date_iso8601(article.published)
             
             if parsed_date is not None:
-                return datetime(*parsed_date[:6]) 
+                return datetime(*parsed_date[:6])  
             else:
                 return datetime.min
         except Exception:
@@ -469,7 +469,7 @@ def create_enhanced_rss_viewer():
         if articles_to_search:
             context_articles_str = "Here is a list of recent articles from the selected RSS category. Please use this information to answer the user's questions:\n\n"
             # Limit context to top 20 articles to avoid exceeding context window
-            for i, article in enumerate(articles_to_search[:20]): 
+            for i, article in enumerate(articles_to_search[:20]):  
                 context_articles_str += (
                     f"Article {i+1}:\n"
                     f"  Feed: {article.feed_name}\n"
@@ -508,8 +508,16 @@ def create_enhanced_rss_viewer():
     # This needs to be done once when the app starts
     global OLLAMA_MODELS
     OLLAMA_MODELS = get_ollama_models()
-    if not OLLAMA_MODELS:
-        OLLAMA_MODELS = ["No models found. Run `ollama run <model_name>`"]
+    
+    # Set preferred model, ensure it's in the list, otherwise fallback to first available
+    preferred_ollama_model = 'llama3.2-vision'
+    if preferred_ollama_model in OLLAMA_MODELS:
+        default_ollama_model = preferred_ollama_model
+    elif OLLAMA_MODELS:
+        default_ollama_model = OLLAMA_MODELS[0]
+    else:
+        default_ollama_model = "No models found. Run `ollama run <model_name>`"
+
 
     # Create Gradio interface
     with gr.Blocks(title="Advanced RSS Feed Viewer", theme=gr.themes.Soft()) as app:
@@ -519,93 +527,96 @@ def create_enhanced_rss_viewer():
         # This hidden state will store the currently active category name from the tabs
         active_category = gr.State(list(RSS_FEEDS.keys())[0] if RSS_FEEDS else "")
 
-        with gr.Row(): # Main layout row
-            with gr.Column(scale=2): # Left column for Feed Viewer Tabs
-                gr.Markdown("## Feed Viewer")
-                gr.Markdown("Select a category to view its recent articles. Each feed is in a scrolling box.")
-                
-                # Tabs for categories
-                with gr.Tabs() as category_tabs:
-                    for category_name in RSS_FEEDS.keys():
-                        with gr.TabItem(category_name, id=f"tab_{category_name}"):
-                            gr.Markdown(f"### Recent Articles in {category_name}")
+        with gr.Tabs() as main_tabs: # Encapsulate all main content in tabs
+            with gr.TabItem("Feed Viewer 📺"): # Renamed for clarity and added emoji
+                with gr.Row(): # Main layout row
+                    with gr.Column(scale=2): # Left column for Feed Viewer Tabs
+                        gr.Markdown("## Feed Viewer")
+                        gr.Markdown("Select a category to view its recent articles. Each feed is in a scrolling box.")
+                        
+                        # Tabs for categories
+                        with gr.Tabs() as category_tabs:
+                            for category_name in RSS_FEEDS.keys():
+                                with gr.TabItem(category_name, id=f"tab_{category_name}"):
+                                    gr.Markdown(f"### Recent Articles in {category_name}")
+                                    
+                                    # Refresh button moved to the top of each tab
+                                    refresh_btn = gr.Button("🔄 Refresh Feeds", variant="primary")
+                                    articles_html_output = gr.HTML(
+                                        value=format_category_feeds_html(category_name), # Initial content
+                                        elem_id=f"articles_display_{category_name}" # Unique ID for each HTML component
+                                    )
+                                    
+                                    refresh_btn.click(
+                                        fn=format_category_feeds_html,
+                                        inputs=[gr.State(category_name)], # Pass the category name as a state
+                                        outputs=articles_html_output
+                                    )
                             
-                            # Refresh button moved to the top of each tab
-                            refresh_btn = gr.Button("🔄 Refresh Feeds", variant="primary")
-                            articles_html_output = gr.HTML(
-                                value=format_category_feeds_html(category_name), # Initial content
-                                elem_id=f"articles_display_{category_name}" # Unique ID for each HTML component
+                            # When a tab is selected, update the active_category state and also trigger a refresh for chat context
+                            category_tabs.select(
+                                fn=lambda category_id: category_id.replace("tab_", ""), # Extract category name from tab ID
+                                inputs=category_tabs,
+                                outputs=active_category
+                            ).success( # After the category ID is set, refresh the content of that specific tab
+                                fn=lambda category_name: format_category_feeds_html(category_name),
+                                inputs=active_category,
+                                outputs=articles_html_output # This needs to point to the *currently active* HTML output. This is tricky with dynamic tabs.
+                                                # A simpler approach for the active_category for chat is to rely on user selection in the chat dropdown.
                             )
-                            
-                            refresh_btn.click(
-                                fn=format_category_feeds_html,
-                                inputs=[gr.State(category_name)], # Pass the category name as a state
-                                outputs=articles_html_output
-                            )
-                    
-                # When a tab is selected, update the active_category state and also trigger a refresh for chat context
-                category_tabs.select(
-                    fn=lambda category_id: category_id.replace("tab_", ""), # Extract category name from tab ID
-                    inputs=category_tabs,
-                    outputs=active_category
-                ).success( # After the category ID is set, refresh the content of that specific tab
-                    fn=lambda category_name: format_category_feeds_html(category_name),
-                    inputs=active_category,
-                    outputs=articles_html_output # This needs to point to the *currently active* HTML output. This is tricky with dynamic tabs.
-                                                 # A simpler approach for the active_category for chat is to rely on user selection in the chat dropdown.
-                )
             
-            with gr.Column(scale=1): # Right column for Chat with RSS
-                gr.Markdown("## 💬 Chat with RSS Feeds")
-                gr.Markdown("Ask questions about the articles from the selected category.")
-                
-                with gr.Row():
-                    # Category for chat: Default to the first category, but allow user override.
-                    # We rely on the user to select the correct category for chat context,
-                    # as dynamically linking the current tab to the dropdown value in real-time
-                    # across separate components can be complex in Gradio.
-                    chat_category_select = gr.Dropdown(
-                        choices=list(RSS_FEEDS.keys()),
-                        label="Select Category for Chat Context",
-                        interactive=True,
-                        value=list(RSS_FEEDS.keys())[0] if RSS_FEEDS else None,
-                        scale=1
-                    )
+            with gr.TabItem("Chat with RSS 💬"): # New tab for chat
+                with gr.Column(scale=1): # Right column for Chat with RSS
+                    gr.Markdown("## 💬 Chat with RSS Feeds")
+                    gr.Markdown("Ask questions about the articles from the selected category.")
                     
-                    ollama_model_dropdown = gr.Dropdown(
-                        choices=OLLAMA_MODELS,
-                        label="Select Ollama Model",
-                        interactive=True,
-                        value=OLLAMA_MODELS[0] if OLLAMA_MODELS else None,
-                        scale=1
-                    )
-                    refresh_models_btn = gr.Button("Refresh Models", scale=0)
-                
-                chatbot = gr.Chatbot(label="RSS Chat", height=400) # Give chatbot a fixed height for better layout
-                msg = gr.Textbox(label="Your Question", placeholder="e.g., Summarize the latest news on AI?", container=False)
-                with gr.Row(): # Buttons for chat input
-                    submit_btn = gr.Button("Send", variant="primary", scale=1)
-                    clear_chat_btn = gr.Button("Clear Chat", scale=0)
+                    with gr.Row():
+                        # Category for chat: Default to the first category, but allow user override.
+                        # We rely on the user to select the correct category for chat context,
+                        # as dynamically linking the current tab to the dropdown value in real-time
+                        # across separate components can be complex in Gradio.
+                        chat_category_select = gr.Dropdown(
+                            choices=list(RSS_FEEDS.keys()),
+                            label="Select Category for Chat Context",
+                            interactive=True,
+                            value=list(RSS_FEEDS.keys())[0] if RSS_FEEDS else None,
+                            scale=1
+                        )
+                        
+                        ollama_model_dropdown = gr.Dropdown(
+                            choices=OLLAMA_MODELS,
+                            label="Select Ollama Model",
+                            interactive=True,
+                            value=default_ollama_model, # Pre-populate with the chosen default model
+                            scale=1
+                        )
+                        refresh_models_btn = gr.Button("Refresh Models", scale=0)
+                    
+                    chatbot = gr.Chatbot(label="RSS Chat", height=400) # Give chatbot a fixed height for better layout
+                    msg = gr.Textbox(label="Your Question", placeholder="e.g., Summarize the latest news on AI?", container=False)
+                    with gr.Row(): # Buttons for chat input
+                        submit_btn = gr.Button("Send", variant="primary", scale=1)
+                        clear_chat_btn = gr.Button("Clear Chat", scale=0)
 
-                # Event listeners for chat
-                msg.submit(
-                    chat_with_feeds,
-                    [chatbot, msg, chat_category_select, ollama_model_dropdown],
-                    [chatbot, msg]
-                )
-                submit_btn.click(
-                    chat_with_feeds,
-                    [chatbot, msg, chat_category_select, ollama_model_dropdown],
-                    [chatbot, msg]
-                )
-                clear_chat_btn.click(lambda: None, None, chatbot, queue=False) # Clears the chatbot
-                
-                refresh_models_btn.click(
-                    fn=get_ollama_models,
-                    outputs=ollama_model_dropdown
-                )
+                    # Event listeners for chat
+                    msg.submit(
+                        chat_with_feeds,
+                        [chatbot, msg, chat_category_select, ollama_model_dropdown],
+                        [chatbot, msg]
+                    )
+                    submit_btn.click(
+                        chat_with_feeds,
+                        [chatbot, msg, chat_category_select, ollama_model_dropdown],
+                        [chatbot, msg]
+                    )
+                    clear_chat_btn.click(lambda: None, None, chatbot, queue=False) # Clears the chatbot
+                    
+                    refresh_models_btn.click(
+                        fn=get_ollama_models,
+                        outputs=ollama_model_dropdown
+                    )
             
-            # Settings Tab (can be outside the main Row if you want it full width, or within its own column)
+            # Settings Tab
             with gr.TabItem("⚙️ Settings"):
                 gr.Markdown("### Application Settings")
                 
