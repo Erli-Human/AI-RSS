@@ -8,6 +8,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import ollama
 import os
+from bs4 import BeautifulSoup # <--- ADD THIS IMPORT
 
 # --- Data Structures ---
 @dataclass
@@ -249,7 +250,8 @@ def fetch_all_feeds_parallel() -> Dict[str, Dict[str, FeedData]]:
 def get_article_preview(article: Article, preview_lines: int = 3) -> str:
     """Generates a concise preview of an article, including a clickable link and feed name."""
     # Ensure no HTML tags in the summary for plain text display and truncate
-    clean_summary = gr.HTML(article.summary).value.replace('<p>', '').replace('</p>', '').strip()
+    # Use BeautifulSoup to parse HTML and get plain text
+    clean_summary = BeautifulSoup(article.summary, 'html.parser').get_text().strip()
     
     # Use Markdown for clickable link
     title_line = f"**[{article.title}]({article.link})**"
@@ -263,19 +265,23 @@ def get_article_preview(article: Article, preview_lines: int = 3) -> str:
     current_length = 0
     line_count = 0
 
-    for word in clean_summary.split():
-        if current_length + len(word) + 1 <= max_chars_per_line:
-            summary_preview_words.append(word)
-            current_length += len(word) + 1
-        else:
-            line_count += 1
-            if line_count >= preview_lines - 1: # -1 because title and info already take two lines
-                break
-            summary_preview_words.append("\n" + word) # Add newline
-            current_length = len(word) + 1
+    # Ensure there's a summary to process
+    if clean_summary:
+        for word in clean_summary.split():
+            if current_length + len(word) + 1 <= max_chars_per_line:
+                summary_preview_words.append(word)
+                current_length += len(word) + 1
+            else:
+                line_count += 1
+                # -1 because title and info lines already take two lines in the final output
+                if line_count >= preview_lines - 1: 
+                    break
+                summary_preview_words.append("\n" + word) # Add newline
+                current_length = len(word) + 1
     
     summary_preview = " ".join(summary_preview_words).strip()
-    if len(summary_preview) < len(clean_summary): # Check if original summary was longer
+    # Check if original summary was longer, implying truncation occurred
+    if clean_summary and len(summary_preview) < len(clean_summary): 
         summary_preview += "..." # Indicate truncation
 
     return f"{title_line}\n{info_line}\nSummary: {summary_preview}"
@@ -503,7 +509,8 @@ with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
             )
         
         # Chat interface for Ollama
-        chatbot = gr.Chatbot(label="Ollama Chat History", height=300)
+        # Added type="messages" to address the UserWarning in Gradio
+        chatbot = gr.Chatbot(label="Ollama Chat History", height=300, type="messages") 
         msg = gr.Textbox(label="Ask a question about the articles:", placeholder="e.g., What are the key trends in AI research?")
         clear = gr.ClearButton([msg, chatbot])
 
@@ -511,7 +518,7 @@ with gr.Blocks(title="Advanced RSS Feed Viewer & AI Assistant") as demo:
         msg.submit(generate_rss_summary_ollama, 
                    inputs=[cached_category_dropdown, msg, ollama_model_dropdown_rss, chatbot], 
                    outputs=[chatbot, msg])
-        clear.click(lambda: (None, ""), inputs=None, outputs=[chatbot, msg])
+        clear.click(lambda: ([], ""), inputs=None, outputs=[chatbot, msg]) # Clear chatbot to empty list, msg to empty string
 
 
     # Link the "Fetch All Feeds" button to update all category tabs and the cached categories dropdown
