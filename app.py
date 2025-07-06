@@ -25,6 +25,7 @@ class Article:
     published: str
     summary: str
     author: str = ""
+    feed_name: str = "" # Add feed_name to Article dataclass
 
 @dataclass
 class FeedData:
@@ -40,9 +41,6 @@ RSS_FEEDS = {
         "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
         "Science Daily - Technology": 
         "https://www.sciencedaily.com/rss/top/technology.xml",
-        "Sam Altman Blog": "https://blog.samaltman.com/", # Corrected entry
-        "O'Reilly Radar": "https://feeds.feedburner.com/oreilly-radar",
-        "Google AI Blog": "https://ai.googleblog.com/feeds/posts/default",
         "OpenAI Blog": "https://openai.com/blog/rss.xml",
         "DeepMind Blog": "https://deepmind.com/blog/feed/basic/",
         "Microsoft AI Blog": "https://blogs.microsoft.com/ai/feed/",
@@ -50,7 +48,6 @@ RSS_FEEDS = {
         "MarkTechPost": "https://www.marktechpost.com/feed/",
         "Berkeley AI Research": "https://bair.berkeley.edu/blog/feed.xml",
         "Distill": "https://distill.pub/rss.xml",
-        "Unite.AI": "https://www.unite.ai/feed/",
         "AI News": "https://www.artificialintelligence-news.com/feed/",
         "VentureBeat AI": "https://venturebeat.com/ai/feed/",
         "MIT Technology Review": "https://www.technologyreview.com/feed/",
@@ -67,8 +64,6 @@ RSS_FEEDS = {
         "Yahoo Finance": "https://finance.yahoo.com/news/rssindex",
         "Financial Samurai": "https://www.financialsamurai.com/feed/",
         "NerdWallet": "https://www.nerdwallet.com/blog/feed/",
-        "Money Under 30": "https://www.moneyunder30.com/feed",
-        "Wall Street Journal": "https://www.wsj.com/xml/rss/3_7085.xml",
         "Bloomberg": "https://feeds.bloomberg.com/markets/news.rss"
     },
     
@@ -76,10 +71,8 @@ RSS_FEEDS = {
         "Phys.org": "https://phys.org/rss-feed/",
         "Nature": "https://www.nature.com/nature.rss",
         "Physical Review Letters": "https://feeds.aps.org/rss/recent/prl.xml",
-        "Scientific American": "https://rss.sciam.com/ScientificAmerican-Global",
         "New Scientist": "https://www.newscientist.com/feed/home/",
         "Physics World": "https://physicsworld.com/feed/",
-        "Symmetry Magazine": "https://www.symmetrymagazine.org/rss/all-articles.xml",
         "Space.com": "https://www.space.com/feeds/all",
         "NASA Breaking News": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
         "Sky & Telescope": "https://www.skyandtelescope.com/feed/",
@@ -108,8 +101,6 @@ RSS_FEEDS = {
         "The Guardian": "https://www.theguardian.com/world/rss",
         "Washington Post": "https://feeds.washingtonpost.com/rss/world",
         "Google News": "https://news.google.com/rss",
-        "Reuters": "https://www.reuters.com/rssFeed/topNews",
-        "Associated Press": "https://feeds.apnews.com/ApNews/apf-topnews",
         "NPR": "https://feeds.npr.org/1001/rss.xml",
         "CBS News": "https://www.cbsnews.com/latest/rss/main"
     },
@@ -117,17 +108,12 @@ RSS_FEEDS = {
     "🏈 SPORTS": {
         "ESPN": "https://www.espn.com/espn/rss/news",
         "Fox Sports": "https://api.foxsports.com/v1/rss?partnerKey=zBaFxRyGKCfxBagJG9b8pqLyndmvo7UU",
-        "Sports Illustrated": "https://www.si.com/rss/si_topstories.rss",
-        "Bleacher Report": "https://bleacherreport.com/articles/feed",
         "The Athletic": "https://theathletic.com/rss/",
         "Yahoo Sports": "https://sports.yahoo.com/rss/",
-        "CBS Sports": "https://www.cbssports.com/rss/headlines",
-        "NFL": "https://www.nfl.com/feeds/rss/news",
-        "NBA": "https://www.nba.com/rss/nba_rss.xml"
+        "CBS Sports": "https://www.cbssports.com/rss/headlines"
     },
     
     "🎬 ENTERTAINMENT": {
-        "Entertainment Weekly": "https://ew.com/feed/",
         "Variety": "https://variety.com/feed/",
         "The Hollywood Reporter": "https://www.hollywoodreporter.com/feed/",
         "Rolling Stone": "https://www.rollingstone.com/feed/",
@@ -138,11 +124,7 @@ RSS_FEEDS = {
     },
     
     "🏥 HEALTH & MEDICINE": {
-        "WebMD": "https://rssfeeds.webmd.com/rss/rss.aspx?RSSSource=RSS_PUBLIC",
         "Mayo Clinic": "https://newsnetwork.mayoclinic.org/feed/",
-        "Harvard Health": "https://www.health.harvard.edu/blog/feed",
-        "Medical News Today": "https://www.medicalnewstoday.com/rss",
-        "Healthline": "https://www.healthline.com/rss",
         "CDC": "https://tools.cdc.gov/api/v2/resources/media/132608.rss"
     },
     
@@ -151,30 +133,25 @@ RSS_FEEDS = {
         "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
         "Decrypt": "https://decrypt.co/feed",
         "The Block": "https://www.theblockcrypto.com/rss.xml",
-        "Bitcoin Magazine": "https://bitcoinmagazine.com/.rss/full/",
-        "Crypto News": "https://www.crypto-news.net/feed/"
+        "Bitcoin Magazine": "https://bitcoinmagazine.com/.rss/full/"
     },
     
     "📊 DATA SCIENCE": {
         "KDnuggets": "https://www.kdnuggets.com/feed",
         "Analytics Vidhya": "https://www.analyticsvidhya.com/feed/",
-        "Towards Data Science": "https://towardsdatascience.com/feed",
-        "Data Science Central": "https://www.datasciencecentral.com/profiles/blog/feed"
+        "Towards Data Science": "https://towardsdatascience.com/feed"
     },
     
     "🌍 WORLD NEWS": {
         "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
         "Deutsche Welle": "https://rss.dw.com/rdf/rss-en-all",
-        "France24": "https://www.france24.com/en/rss",
         "RT": "https://www.rt.com/rss/",
         "Times of India": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
     },
     
     "🍔 FOOD & COOKING": {
-        "Food Network": "https://www.foodnetwork.com/feeds/all-latest-recipes.xml",
         "Bon Appétit": "https://www.bonappetit.com/feed/rss",
-        "Serious Eats": "https://feeds.feedburner.com/seriouseats/recipes",
-        "Epicurious": "https://www.epicurious.com/services/rss/recipes/latest"
+        "Serious Eats": "https://feeds.feedburner.com/seriouseats/recipes"
     },
     
     "🎨 DESIGN & CREATIVITY": {
@@ -185,15 +162,18 @@ RSS_FEEDS = {
     },
     
     "🌱 ENVIRONMENT & SUSTAINABILITY": {
-        "TreeHugger": "https://www.treehugger.com/feeds/rss/",
-        "Environmental News Network": "https://www.enn.com/rss/",
-        "Climate Central": "https://www.climatecentral.org/rss/news.xml",
         "Green Tech Media": "https://www.greentechmedia.com/rss/all"
     }
 }
 
+# Global cache for fetched articles to enable chat functionality
+# This is a simple in-memory cache. For a real app, consider persistent storage.
+# Key: category name, Value: List of Article objects
+GLOBAL_ARTICLE_CACHE: Dict[str, List[Article]] = {}
+
+
 # Core RSS functionality
-def fetch_rss_feed(url: str, timeout: int = 10) -> FeedData:
+def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
     """Fetch and parse a single RSS feed."""
     try:
         # Set user agent to avoid blocking
@@ -215,13 +195,14 @@ def fetch_rss_feed(url: str, timeout: int = 10) -> FeedData:
             )
         
         articles = []
-        for entry in feed.entries[:10]:  # Limit to 10 most recent articles
+        for entry in feed.entries:  # Keep all articles for the chat/search cache
             article = Article(
                 title=entry.get('title', 'No title'),
                 link=entry.get('link', ''),
                 published=entry.get('published', 'Unknown date'),
                 summary=entry.get('summary', 'No summary available')[:200] + "...",
-                author=entry.get('author', 'Unknown author')
+                author=entry.get('author', 'Unknown author'),
+                feed_name=feed_name # Store the feed name with the article
             )
             articles.append(article)
         
@@ -256,7 +237,7 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_feed = {
-            executor.submit(fetch_rss_feed, url): name  
+            executor.submit(fetch_rss_feed, url, name): name  # Pass feed_name
             for name, url in feeds.items()
         }
         
@@ -274,127 +255,55 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
     
     return results
 
-class FeedAnalytics:
-    """Analytics and export functionality for RSS feeds."""
-    
-    def __init__(self):
-        self.feed_history = []
-    
-    def log_feed_check(self, category: str, feed_name: str, status: str, article_count: int):
-        """Log feed check results for analytics."""
-        self.feed_history.append({
-            'timestamp': datetime.now(),
-            'category': category,
-            'feed_name': feed_name,
-            'status': status,
-            'article_count': article_count
-        })
-    
-    def export_to_csv(self, results: Dict[str, Any]) -> str:
-        """Export feed results to CSV format."""
-        output = StringIO()
-        writer = csv.writer(output)
-        
-        # Write header
-        writer.writerow(['Category', 'Feed Name', 'Status', 'Articles', 'Last Updated', 'Error'])
-        
-        # Write data
-        for category, feeds in results.items():
-            for feed_name, feed_data in feeds.items():
-                writer.writerow([
-                    category,
-                    feed_name,
-                    feed_data.status,
-                    len(feed_data.articles) if feed_data.status == 'success' else 0,
-                    feed_data.last_updated,
-                    feed_data.error if feed_data.status == 'error' else ''
-                ])
-        
-        return output.getvalue()
-    
-    def export_to_json(self, results: Dict[str, Any]) -> str:
-        """Export feed results to JSON format."""
-        export_data = {}
-        
-        for category, feeds in results.items():
-            export_data[category] = {}
-            for feed_name, feed_data in feeds.items():
-                export_data[category][feed_name] = {
-                    'status': feed_data.status,
-                    'articles': [asdict(article) for article in feed_data.articles],
-                    'last_updated': feed_data.last_updated,
-                    'error': feed_data.error if feed_data.status == 'error' else None
-                }
-        
-        return json.dumps(export_data, indent=2, default=str)
-    
-    def create_status_chart(self, results: Dict[str, Any]) -> str:
-        """Create a status chart as base64 encoded image."""
-        categories = []
-        working_counts = []
-        total_counts = []
-        
-        for category, feeds in results.items():
-            # Remove emojis for chart labels (if any are still present from the category names)
-            clean_category = category.replace('🤖 ', '').replace('💻 ', '').replace('🔬 ', '').replace('📰 ', '') \
-                                     .replace('💰 ', '').replace('🏈 ', '').replace('🎬 ', '').replace('🏥 ', '') \
-                                     .replace('🔗 ', '').replace('📊 ', '').replace('🌍 ', '').replace('🍔 ', '') \
-                                     .replace('🎨 ', '').replace('🌱 ', '')
-            categories.append(clean_category[:15])
-            working = sum(1 for feed in feeds.values() if feed.status == 'success')
-            total = len(feeds)
-            working_counts.append(working)
-            total_counts.append(total)
-        
-        # Create chart
-        fig, ax = plt.subplots(figsize=(12, 6))
-        x = range(len(categories))
-        
-        ax.bar([i - 0.2 for i in x], working_counts, 0.4, label='Working', color='#00b894')
-        ax.bar([i + 0.2 for i in x], total_counts, 0.4, label='Total', color='#ddd')
-        
-        ax.set_xlabel('Categories')
-        ax.set_ylabel('Number of Feeds')
-        ax.set_title('RSS Feed Status by Category')
-        ax.set_xticks(x)
-        ax.set_xticklabels(categories, rotation=45, ha='right')
-        ax.legend()
-        
-        plt.tight_layout()
-        
-        # Convert to base64
-        buffer = BytesIO()
-        plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
-        buffer.seek(0)
-        image_base64 = base64.b64encode(buffer.getvalue()).decode()
-        plt.close()
-        
-        return f"data:image/png;base64,{image_base64}"
-
 # Main application
 def create_enhanced_rss_viewer():
     """Create the main RSS viewer application."""
     
-    analytics = FeedAnalytics()
-    
-    def format_articles_html(articles: List[Article]) -> str:
-        """Format articles as HTML."""
-        if not articles:
-            return "<p>No articles found.</p>"
+    # Modified to accept a dictionary of feed_name -> List[Article]
+    def format_articles_html(feeds_with_articles: Dict[str, List[Article]], num_articles_per_feed: int = 3) -> str:
+        """Format articles from multiple feeds as HTML, showing a preview per feed."""
+        if not feeds_with_articles:
+            return "<p>No articles found for the selected category.</p>"
         
         html = "<div style='max-height: 600px; overflow-y: auto;'>"
-        for article in articles:
-            html += f"""
-            <div style='border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px;'>
-                <h3><a href='{article.link}' target='_blank' style='color: #2196F3; text-decoration: none;'>{article.title}</a></h3>
-                <p style='color: #666; font-size: 0.9em;'>📅 {article.published} | ✍️ {article.author}</p>
-            </div>
-            """
+        
+        for feed_name, articles in feeds_with_articles.items():
+            html += f"<div style='border: 1px solid #ccc; margin: 20px 0; padding: 15px; border-radius: 8px; background-color: #f9f9f9;'>"
+            html += f"<h3 style='color: #333;'>Feed: {feed_name}</h3>"
+            
+            if not articles:
+                html += "<p>No articles available for this feed.</p>"
+            else:
+                # Sort articles by published date for the preview (most recent first)
+                try:
+                    # Filter out articles with 'Unknown date' or non-parseable dates for sorting
+                    parseable_articles = [
+                        a for a in articles 
+                        if a.published != 'Unknown date'
+                        # A more robust date parsing for sorting can be added here if needed
+                        # For now, relying on the 'published_parsed' from feedparser is complex without re-parsing
+                        # For simple string dates, simple string comparison might work for YYYY-MM-DD HH:MM:SS
+                    ]
+                    parseable_articles.sort(key=lambda x: x.published, reverse=True) # Assuming string format allows sorting
+                    sorted_articles = parseable_articles
+                except Exception as e:
+                    print(f"Warning: Could not sort articles for feed {feed_name} by date. Error: {e}")
+                    sorted_articles = articles # Fallback to unsorted if sort fails
+
+                for article in sorted_articles[:num_articles_per_feed]: # Take only the top N
+                    html += f"""
+                    <div style='border: 1px solid #eee; margin: 10px 0; padding: 10px; border-radius: 5px; background-color: #fff;'>
+                        <h4><a href='{article.link}' target='_blank' style='color: #2196F3; text-decoration: none;'>{article.title}</a></h4>
+                        <p style='color: #666; font-size: 0.9em;'>📅 {article.published} | ✍️ {article.author}</p>
+                        <p>{article.summary}</p>
+                    </div>
+                    """
+            html += "</div>"
         html += "</div>"
         return html
     
     def load_category_feeds(category):
-        """Load feeds for a specific category."""
+        """Load feeds for a specific category and cache articles."""
         if not category or category not in RSS_FEEDS:
             return "Please select a category.", ""
         
@@ -413,15 +322,17 @@ def create_enhanced_rss_viewer():
             </div>
             """
             
-            # Create feed details
+            # Create feed details and prepare articles for display and caching
             feeds_html = ""
-            all_articles = []
+            all_articles_for_cache = [] # All articles for the chat cache
+            articles_for_display = {} # Dictionary: feed_name -> List[Article] for display
             
             for feed_name, feed_data in feeds_data.items():
                 if feed_data.status == 'success':
                     status_icon = "✅"
                     article_count = len(feed_data.articles)
-                    all_articles.extend(feed_data.articles)
+                    all_articles_for_cache.extend(feed_data.articles)
+                    articles_for_display[feed_name] = feed_data.articles
                 else:
                     status_icon = "❌"
                     article_count = 0
@@ -434,23 +345,12 @@ def create_enhanced_rss_viewer():
                 </div>
                 """
             
-            # Sort articles by date (most recent first)
-            try:
-                # Filter out articles with 'Unknown date' or non-parseable dates for sorting
-                parseable_articles = [
-                    a for a in all_articles 
-                    if a.published != 'Unknown date' and 'published_parsed' in feedparser.parse(a.link).entries[0]
-                ]
-                # Sort based on parsed time
-                parseable_articles.sort(key=lambda x: feedparser.parse(x.link).entries[0].published_parsed, reverse=True)
-                # Re-add unparseable articles at the end if necessary, or just use parseable ones
-                all_articles = parseable_articles 
-            except Exception as e:
-                # Fallback if sorting based on feedparser's internal parsed_published fails
-                print(f"Warning: Could not sort articles by date. Error: {e}")
-                pass 
+            # Cache ALL articles (across all feeds in the category) for the chat tab
+            # Sorting for the cache isn't strictly necessary here as chat will filter/search
+            GLOBAL_ARTICLE_CACHE[category] = all_articles_for_cache
             
-            articles_html = format_articles_html(all_articles[:20])  # Show top 20 articles
+            # Format articles for display, showing previews per feed
+            articles_html = format_articles_html(articles_for_display, num_articles_per_feed=3) 
             
             return status_html + feeds_html, articles_html
             
@@ -461,11 +361,48 @@ def create_enhanced_rss_viewer():
     def refresh_feeds(category):
         """Refresh feeds for the selected category."""
         return load_category_feeds(category)
-    
+
+    # Function for the "Chat with RSS feeds" tab
+    def chat_with_feeds(chat_history: List[List[str]], user_input: str, chat_category: str):
+        if not user_input.strip():
+            return chat_history, "Please enter a query."
+
+        if not chat_category or chat_category not in GLOBAL_ARTICLE_CACHE:
+            return chat_history, "Please select a category and load its feeds first in the Feed Viewer tab."
+        
+        articles_to_search = GLOBAL_ARTICLE_CACHE[chat_category]
+        
+        # --- Simple Keyword-based "Chat" (replace with actual LLM integration for real chat) ---
+        response_articles = []
+        user_input_lower = user_input.lower()
+        
+        for article in articles_to_search:
+            # Check title, summary, and feed_name for keywords
+            if user_input_lower in article.title.lower() or \
+               user_input_lower in article.summary.lower() or \
+               user_input_lower in article.feed_name.lower():
+                response_articles.append(article)
+                if len(response_articles) >= 5: # Limit responses to top 5 matches
+                    break
+        
+        if response_articles:
+            chat_response = "Here are some relevant articles:\n\n"
+            for article in response_articles:
+                chat_response += f"**Feed:** {article.feed_name}\n" # Include feed name in chat response
+                chat_response += f"**Title:** [{article.title}]({article.link})\n"
+                chat_response += f"**Summary:** {article.summary}\n\n"
+        else:
+            chat_response = "Sorry, I couldn't find any articles matching your query in the current category. Try a different keyword or load another category."
+        # --- End of Simple Keyword-based "Chat" ---
+
+        chat_history.append([user_input, chat_response])
+        return chat_history, "" # Clear user input box
+
+
     # Create Gradio interface
     with gr.Blocks(title="Advanced RSS Feed Viewer", theme=gr.themes.Soft()) as app:
         gr.Markdown("# 📰 Advanced RSS Feed Viewer")
-        gr.Markdown("Monitor and view RSS feeds from various sources.")
+        gr.Markdown("Monitor and view RSS feeds from various sources with a basic chat functionality.")
         
         with gr.Tabs():
             # Main Feed Viewer Tab
@@ -482,7 +419,7 @@ def create_enhanced_rss_viewer():
                     with gr.Column(scale=1):
                         feed_status = gr.HTML(label="Feed Status")
                     with gr.Column(scale=2):
-                        articles_display = gr.HTML(label="Recent Articles")
+                        articles_display = gr.HTML(label="Recent Articles Previews (Per Feed)")
                 
                 # Load initial data
                 if RSS_FEEDS: # Only add change listener if there are feeds to load
@@ -497,6 +434,25 @@ def create_enhanced_rss_viewer():
                         inputs=[category_dropdown],
                         outputs=[feed_status, articles_display]
                     )
+            
+            # New "Chat with RSS Feeds" Tab
+            with gr.TabItem("💬 Chat with RSS Feeds"):
+                gr.Markdown("### Ask questions about the loaded RSS feeds!")
+                gr.Markdown("First, go to the 'Feed Viewer' tab and select a category to load its articles. Then you can chat here.")
+                
+                chat_category_select = gr.Dropdown(
+                    choices=list(RSS_FEEDS.keys()),
+                    label="Select Category for Chat",
+                    interactive=True,
+                    value=list(RSS_FEEDS.keys())[0] if RSS_FEEDS else None
+                )
+
+                chatbot = gr.Chatbot(label="RSS Chat")
+                msg = gr.Textbox(label="Your Question", placeholder="e.g., What are the latest AI advancements?")
+                clear = gr.Button("Clear Chat")
+
+                msg.submit(chat_with_feeds, [chatbot, msg, chat_category_select], [chatbot, msg])
+                clear.click(lambda: None, None, chatbot, queue=False) # Clears the chatbot
             
             # Settings Tab
             with gr.TabItem("⚙️ Settings"):
@@ -565,6 +521,7 @@ class Article:
     published: str
     summary: str
     author: str = ""
+    feed_name: str = "" # Added for consistency if needed by monitoring
 
 @dataclass
 class FeedData:
@@ -671,8 +628,9 @@ RSS_FEEDS = {
         "Variety": "https://variety.com/feed/",
         "The Hollywood Reporter": "https://www.hollywoodreporter.com/feed/",
         "Rolling Stone": "https://www.rollingstone.com/feed/",
-        "Billboard": "https://www.billboard.com/feed/"'''
-    
+        "Billboard": "https://www.billboard.com/feed/"
+    }
+}
     # ... (rest of create_monitoring_script, which is a string and won't be modified by this change)
     return monitoring_script
 
