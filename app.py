@@ -74,7 +74,9 @@ class FeedAnalytics:
         total_counts = []
         
         for category, feeds in results.items():
-            categories.append(category.replace('🤖 ', '').replace('💻 ', '').replace('🔬 ', '')[:15])
+            # Remove emojis for chart labels
+            clean_category = category.replace('🤖 ', '').replace('💻 ', '').replace('🔬 ', '')
+            categories.append(clean_category[:15])
             working = sum(1 for feed in feeds.values() if feed.status == 'success')
             total = len(feeds)
             working_counts.append(working)
@@ -149,7 +151,7 @@ def add_export_tab(app):
                 content = analytics.export_to_json(all_results)
                 filename = f"rss_feeds_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             
-            # Save file
+            # Save file with UTF-8 encoding
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(content)
             
@@ -168,8 +170,7 @@ def add_export_tab(app):
 def create_monitoring_script():
     """Create a separate monitoring script for continuous feed checking."""
     
-    monitoring_script = '''
-#!/usr/bin/env python3
+    monitoring_script = '''#!/usr/bin/env python3
 """
 RSS Feed Monitoring Script
 Runs continuous monitoring of RSS feeds and generates reports.
@@ -184,7 +185,7 @@ import schedule
 
 def check_all_feeds():
     """Check all feeds and generate status report."""
-    print(f"🔍 Starting feed check at {datetime.now()}")
+    print(f"[INFO] Starting feed check at {datetime.now()}")
     
     all_results = {}
     for category in RSS_FEEDS.keys():
@@ -206,24 +207,24 @@ def check_all_feeds():
         'details': all_results
     }
     
-    # Save report
+    # Save report with UTF-8 encoding
     filename = f"feed_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    with open(filename, 'w') as f:
+    with open(filename, 'w', encoding='utf-8') as f:
         json.dump(report, f, indent=2, default=str)
     
-    print(f"✅ Check complete: {working_feeds}/{total_feeds} feeds working ({report['success_rate']:.1f}%)")
+    print(f"[SUCCESS] Check complete: {working_feeds}/{total_feeds} feeds working ({report['success_rate']:.1f}%)")
     
     # Alert if success rate is low
     if report['success_rate'] < 80:
-        print(f"⚠️  WARNING: Success rate below 80%!")
+        print(f"[WARNING] Success rate below 80%!")
         # Add email notification here if needed
     
     return report
 
 def main():
     """Main monitoring loop."""
-    print("🚀 RSS Feed Monitor Started")
-    print("📊 Monitoring", sum(len(feeds) for feeds in RSS_FEEDS.values()), "feeds")
+    print("[START] RSS Feed Monitor Started")
+    print(f"[INFO] Monitoring {sum(len(feeds) for feeds in RSS_FEEDS.values())} feeds")
     
     # Schedule checks
     schedule.every(30).minutes.do(check_all_feeds)
@@ -241,7 +242,8 @@ if __name__ == "__main__":
     main()
 '''
     
-    with open("rss_monitor.py", "w") as f:
+    # Write with UTF-8 encoding to handle any Unicode characters
+    with open("rss_monitor.py", "w", encoding='utf-8') as f:
         f.write(monitoring_script)
     
     print("📝 Created monitoring script: rss_monitor.py")
@@ -250,8 +252,7 @@ if __name__ == "__main__":
 def create_docker_files():
     """Create Docker configuration for easy deployment."""
     
-    dockerfile = '''
-FROM python:3.11-slim
+    dockerfile = '''FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -265,8 +266,7 @@ EXPOSE 7860
 CMD ["python", "rss_viewer.py"]
 '''
     
-    docker_compose = '''
-version: '3.8'
+    docker_compose = '''version: '3.8'
 
 services:
   rss-viewer:
@@ -280,10 +280,11 @@ services:
     restart: unless-stopped
 '''
     
-    with open("Dockerfile", "w") as f:
+    # Write Docker files with UTF-8 encoding
+    with open("Dockerfile", "w", encoding='utf-8') as f:
         f.write(dockerfile)
     
-    with open("docker-compose.yml", "w") as f:
+    with open("docker-compose.yml", "w", encoding='utf-8') as f:
         f.write(docker_compose)
     
     print("🐳 Created Docker configuration files")
