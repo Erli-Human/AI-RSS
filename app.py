@@ -408,8 +408,8 @@ def create_enhanced_rss_viewer():
 
 
     # Create Gradio interface
-    with gr.Blocks(title="Advanced RSS Feed Viewer", theme=gr.themes.Soft()) as app:
-        gr.Markdown("# 📰 Advanced RSS Feed Viewer")
+    with gr.Blocks(title="Datanacci Advanced RSS Viewer", theme=gr.themes.Soft()) as app:
+        gr.Markdown("# 📰 Datanacci Advanced RSS Viewer")
         gr.Markdown("Monitor and view RSS feeds from various sources with a basic chat functionality.")
         
         with gr.Tabs():
