@@ -5,6 +5,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from io import StringIO, BytesIO
 import base64
+from typing import Dict, Any
+from dataclasses import asdict
+import gradio as gr
+import schedule
+import time
+import smtplib
+from email.mime.text import MIMEText
 
 class FeedAnalytics:
     """Analytics and export functionality for RSS feeds."""
@@ -22,7 +29,7 @@ class FeedAnalytics:
             'article_count': article_count
         })
     
-    def export_to_csv(self, results: Dict) -> str:
+    def export_to_csv(self, results: Dict[str, Any]) -> str:
         """Export feed results to CSV format."""
         output = StringIO()
         writer = csv.writer(output)
@@ -44,7 +51,7 @@ class FeedAnalytics:
         
         return output.getvalue()
     
-    def export_to_json(self, results: Dict) -> str:
+    def export_to_json(self, results: Dict[str, Any]) -> str:
         """Export feed results to JSON format."""
         export_data = {}
         
@@ -60,7 +67,7 @@ class FeedAnalytics:
         
         return json.dumps(export_data, indent=2, default=str)
     
-    def create_status_chart(self, results: Dict) -> str:
+    def create_status_chart(self, results: Dict[str, Any]) -> str:
         """Create a status chart as base64 encoded image."""
         categories = []
         working_counts = []
