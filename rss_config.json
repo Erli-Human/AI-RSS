@@ -1,0 +1,45 @@
+{
+  "Technology": [
+    "https://www.theverge.com/rss/index.xml",
+    "https://techcrunch.com/feed/",
+    "https://www.wired.com/feed/",
+    "https://arstechnica.com/feeds/rss/",
+    "https://www.engadget.com/rss/"
+  ],
+  "Science": [
+    "https://www.sciencemag.org/rss/news",
+    "https://www.nature.com/rss/news",
+    "https://phys.org/rss-feed/",
+    "https://sciencealert.com/feed/"
+  ],
+  "World News": [
+    "http://feeds.bbci.co.uk/news/rss.xml",
+    "https://www.reuters.com/feed/worldNews",
+    "https://apnews.com/hub/world-news/feed/",
+    "https://www.voanews.com/api/v1/content?category=world&format=rss"
+  ],
+  "Business": [
+    "https://www.wsj.com/xml/rss/business",
+    "https://www.cnbc.com/feed/",
+    "https://www.bloomberg.com/news/rss",
+    "https://www.forbes.com/feeds/business/"
+  ],
+  "Sports": [
+    "http://feeds.bbci.co.uk/sport/rss.xml",
+    "https://www.espn.com/rss/sports",
+    "https://www.foxsports.com/rss/",
+    "https://www.nbcsports.com/rss/"
+  ],
+  "Health": [
+    "https://www.nih.gov/news-events/news-releases/feed",
+    "https://www.cdc.gov/media/rss/index.xml",
+    "https://www.who.int/news-room/news-releases/feed",
+    "https://www.medicalnewstoday.com/rss/"
+  ],
+  "Entertainment": [
+    "http://feeds.bbci.co.uk/entertainment/rss.xml",
+    "https://www.hollywoodreporter.com/feed/",
+    "https://variety.com/feed/",
+    "https://ew.com/feed/"
+  ]
+}
