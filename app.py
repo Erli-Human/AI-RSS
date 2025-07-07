@@ -3,7 +3,6 @@ import datetime
 import json
 import logging
 import os
-import queue
 import re
 import subprocess
 import threading
@@ -69,13 +68,17 @@ async def fetch_rss_feeds():
                             parsed_feed = feedparser.parse(feed)
                             articles = []
                             for entry in parsed_feed.entries:
-                                article = {
-                                    "title": entry.title,
-                                    "link": entry.link,
-                                    "summary": entry.summary if hasattr(entry, 'summary') else "",
-                                    "published": datetime.datetime.strptime(entry.published, "%a, %d %b %Y %H:%M:%S %z") if hasattr(entry, 'published') else None
-                                }
-                                articles.append(article)
+                                try:
+                                    article = {
+                                        "title": entry.title,
+                                        "link": entry.link,
+                                        "summary": entry.summary if hasattr(entry, 'summary') else "",
+                                        "published": datetime.datetime.strptime(entry.published, "%a, %d %b %Y %H:%M:%S %z") if hasattr(entry, 'published') else None
+                                    }
+                                    articles.append(article)
+                                except (ValueError, TypeError) as e:
+                                    logging.error(f"Error parsing date for entry in {feed_url}: {e}")
+
                             GLOBAL_ARTICLE_CACHE[category].extend(articles)
                         else:
                             logging.error(f"Failed to fetch feed {feed_url}: Status code {response.status}")
