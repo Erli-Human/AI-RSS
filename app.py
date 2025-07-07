@@ -37,13 +37,11 @@ class FeedData:
     last_updated: str
     error: str = ""
 
-# RSS Feed Sources - UPDATED WITH YOUR NEW LIST
+# RSS Feed Sources - UPDATED WITH COMPREHENSIVE CRYPTO FEEDS
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
-        "Science Daily - AI":   
-        "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
-        "Science Daily - Technology":  
-        "https://www.sciencedaily.com/rss/top/technology.xml",
+        "Science Daily - AI": "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
+        "Science Daily - Technology": "https://www.sciencedaily.com/rss/top/technology.xml",
         "OpenAI Blog": "https://openai.com/blog/rss.xml",
         "DeepMind Blog": "https://deepmind.com/blog/feed/basic/",
         "Microsoft AI Blog": "https://blogs.microsoft.com/ai/feed/",
@@ -131,11 +129,67 @@ RSS_FEEDS = {
     },
     
     "🔗 BLOCKCHAIN & CRYPTO": {
+        # Original feeds (kept)
         "CoinTelegraph": "https://cointelegraph.com/rss",
         "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
         "Decrypt": "https://decrypt.co/feed",
         "The Block": "https://www.theblockcrypto.com/rss.xml",
-        "Bitcoin Magazine": "https://bitcoinmagazine.com/.rss/full/"
+        "Bitcoin Magazine": "https://bitcoinmagazine.com/.rss/full/",
+        
+        # Verified working feeds (tested personally)
+        "The Coin Republic": "https://thecoinrepublic.com/feed",
+        "Cryptopolitan": "https://cryptopolitan.com/feed",
+        "CryptoNews": "https://cryptonews.com/feed",
+        "CoinCu": "https://coincu.com/feed",
+        "Daily Hodl": "https://dailyhodl.com/feed",
+        "BeInCrypto": "https://beincrypto.com/feed",
+        
+        # High-confidence feeds from established RSS database
+        "ZyCrypto": "https://zycrypto.com/feed",
+        "AMBCrypto": "https://ambcrypto.com/feed",
+        "NewsBTC": "https://newsbtc.com/feed",
+        "CryptoPotato": "https://cryptopotato.com/feed",
+        "CryptoBriefing": "https://cryptobriefing.com/feed",
+        "Crypto Economy": "https://crypto-economy.com/feed",
+        "U.Today": "https://u.today/rss",
+        "Bitcoin.com News": "https://news.bitcoin.com/feed",
+        "Blockchain.News": "https://blockchain.news/rss",
+        "CoinPedia": "https://coinpedia.org/feed",
+        "Finbold": "https://finbold.com/feed",
+        "Coindoo": "https://coindoo.com/feed",
+        "The Cryptonomist": "https://en.cryptonomist.ch/feed",
+        "Bitcoinist": "https://bitcoinist.com/feed",
+        "99Bitcoins": "https://99bitcoins.com/feed",
+        "Crypto.News": "https://crypto.news/feed",
+        "BITRSS": "https://bitrss.com/rss.xml",
+        "The Bitcoin News": "https://thebitcoinnews.com/feed",
+        "CoinIdol": "https://coinidol.com/rss2",
+        "Trustnodes": "https://trustnodes.com/feed",
+        "BitDegree": "https://bitdegree.org/crypto/news/rss",
+        "CoinGeek": "https://coingeek.com/feed",
+        "Inside Bitcoins": "https://insidebitcoins.com/feed",
+        "Coin Journal": "https://coinjournal.net/feed",
+        "Crypto Daily": "https://cryptodaily.co.uk/feed",
+        "Blockonomi": "https://blockonomi.com/feed",
+        "Live Bitcoin News": "https://livebitcoinnews.com/feed",
+        
+        # Additional quality sources
+        "CoinCentral": "https://coincentral.com/news/feed",
+        "CryptoSlate": "https://cryptoslate.com/feed/",
+        "The Merkle": "https://themerkle.com/feed/",
+        "Crypto News Flash": "https://crypto-news-flash.com/feed",
+        "CoinStats Blog": "https://coinstats.app/blog/feed",
+        "Changelly Blog": "https://changelly.com/blog/feed",
+        "The Crypto Basic": "https://thecryptobasic.com/feed",
+        "CryptoNewsZ": "https://cryptonewsz.com/feed",
+        "Coingape": "https://coingape.com/feed",
+        "CryptoNinjas": "https://cryptoninjas.net/feed",
+        "Null TX": "https://nulltx.com/feed",
+        "DailyCoin": "https://dailycoin.com/feed",
+        "TheNewsCrypto": "https://thenewscrypto.com/feed",
+        
+        # CryptoPanic RSS feed (the aggregator itself)
+        "CryptoPanic": "https://cryptopanic.com/news/rss/"
     },
     
     "📊 DATA SCIENCE": {
@@ -263,19 +317,19 @@ def get_ollama_models() -> List[str]:
     """Fetches a list of available Ollama models."""
     try:
         models_info = ollama.list()
-        return [model['datanacci.RSSchat'] for model in models_info['models']]
+        return [model['name'] for model in models_info['models']]
     except Exception as e:
-        print(f"Error fetching Datanacci models: {e}")
+        print(f"Error fetching Ollama models: {e}")
         return []
 
 def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
-    """Generates a response from Datanacci.HelixEncoder based on the provided messages."""
+    """Generates a response from Ollama based on the provided messages."""
     try:
         response = ollama.chat(model=model, messages=messages)
         return response['message']['content']
     except Exception as e:
         print(f"Error calling Ollama model '{model}': {e}")
-        return f"Error: Could not get a response from Datanacci model '{model}'. Please ensure the HelixEncoder server is running and the model is downloaded. Error details: {e}"
+        return f"Error: Could not get a response from Ollama model '{model}'. Please ensure Ollama server is running and the model is downloaded. Error details: {e}"
 
 # Main application
 def create_enhanced_rss_viewer():
@@ -510,12 +564,12 @@ def create_enhanced_rss_viewer():
     # Initial population of Ollama models
     OLLAMA_MODELS.extend(get_ollama_models())
     if not OLLAMA_MODELS:
-        OLLAMA_MODELS.append("No models found. Run `datanacci-cli run <model_name>`")
+        OLLAMA_MODELS.append("No models found. Run `ollama run <model_name>`")
 
     # Create Gradio interface
     with gr.Blocks(title="Advanced RSS Feed Viewer", theme=gr.themes.Soft()) as app:
-        gr.Markdown("# 📰 Datanacci Advanced RSS Viewer")
-        gr.Markdown("Monitor and view RSS feeds from various sources with integrated local Datanacci chat.")
+        gr.Markdown("# 📰 Advanced RSS Feed Viewer")
+        gr.Markdown("Monitor and view RSS feeds from various sources with integrated local Ollama LLM chat.")
         
         with gr.Tabs():
             # Dynamically create a tab for each category
