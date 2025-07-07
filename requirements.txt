@@ -12,4 +12,3 @@ certifi==2023.11.17
 charset-normalizer==3.3.2
 idna==3.6
 schedule
-typer==0.16.0
