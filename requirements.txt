@@ -1,5 +1,5 @@
 gradio==4.5.0
-feedparser==6.0.10
+feedparser
 python-dateutil==2.8.2
 subprocess32  # Needed for older systems, may not be required on all platforms
 requests==2.31.0
