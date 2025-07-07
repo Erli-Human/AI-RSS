@@ -1,5 +1,4 @@
 gradio==4.5.0
-html==1.15.0
 aiohttp
 feedparser
 python-dateutil==2.8.2
