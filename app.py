@@ -567,9 +567,9 @@ def create_enhanced_rss_viewer():
         OLLAMA_MODELS.append("No models found. Run `Datanacci run <model_name>`")
 
     # Create Gradio interface
-    with gr.Blocks(title="Advanced RSS Feed Viewer", theme=gr.themes.Soft()) as app:
-        gr.Markdown("# 📰 Advanced RSS Feed Viewer")
-        gr.Markdown("Monitor and view RSS feeds from various sources with integrated local Datanacci chat.")
+    with gr.Blocks(title="Datanacci RSS Feed Agent", theme=gr.themes.Soft()) as app:
+        gr.Markdown("# 📰 Datanacci RSS Feed Agent")
+        gr.Markdown("Monitor and view RSS feeds from various sources with integrated Datanacci.blockchain vault chat.")
         
         with gr.Tabs():
             # Dynamically create a tab for each category
