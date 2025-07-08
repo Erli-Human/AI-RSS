@@ -634,8 +634,8 @@ def create_enhanced_rss_viewer():
                 )
             
             # Settings Tab
-            with gr.TabItem("⚙️ Settings"):
-                gr.Markdown("### Application Settings")
+            with gr.TabItem("⚙️ Datanacci Settings"):
+                gr.Markdown("### HelixEncoder Settings")
                 
                 with gr.Row():
                     with gr.Column():
