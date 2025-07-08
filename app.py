@@ -314,22 +314,22 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
 
 # Ollama Integration Functions
 def get_ollama_models() -> List[str]:
-    """Fetches a list of available Ollama models."""
+    """Fetches a list of available Datanacci models."""
     try:
         models_info = ollama.list()
-        return [model['name'] for model in models_info['models']]
+        return [model['name'] for model in models_info['datanacci-rss-model']]
     except Exception as e:
-        print(f"Error fetching Ollama models: {e}")
+        print(f"Error fetching Datanacci models: {e}")
         return []
 
 def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
-    """Generates a response from Ollama based on the provided messages."""
+    """Generates a response from Datanacci based on the provided messages."""
     try:
         response = ollama.chat(model=model, messages=messages)
         return response['message']['content']
     except Exception as e:
-        print(f"Error calling Ollama model '{model}': {e}")
-        return f"Error: Could not get a response from Ollama model '{model}'. Please ensure Ollama server is running and the model is downloaded. Error details: {e}"
+        print(f"Error calling Datanacci model '{model}': {e}")
+        return f"Error: Could not get a response from Datanacci model '{model}'. Please ensure Datanacci server is running and the model is downloaded. Error details: {e}"
 
 # Main application
 def create_enhanced_rss_viewer():
@@ -507,7 +507,7 @@ def create_enhanced_rss_viewer():
         ollama_model_name: str
     ) -> Tuple[List[List[str]], str]:
         """
-        Processes user input and generates a response using Ollama,
+        Processes user input and generates a response using Datanacci,
         leveraging cached RSS articles as context.
         """
         if not user_input.strip():
@@ -517,7 +517,7 @@ def create_enhanced_rss_viewer():
             return chat_history, "Please select a category and load its feeds first in the Feed Viewer tab."
         
         if not ollama_model_name:
-            return chat_history, "Please select an Ollama model."
+            return chat_history, "Please select an Datanacci model."
 
         articles_to_search = GLOBAL_ARTICLE_CACHE[chat_category]
 
@@ -538,7 +538,7 @@ def create_enhanced_rss_viewer():
         else:
             context_articles_str = "No articles are available for the selected category. Please answer the user's questions based on general knowledge."
 
-        # Prepare messages for Ollama API
+        # Prepare messages for Datanacci API
         messages = [
             {"role": "system", "content": f"You are a helpful assistant specialized in summarizing and answering questions about RSS feed content. {context_articles_str}"}
         ]
@@ -555,7 +555,7 @@ def create_enhanced_rss_viewer():
             # Call Ollama for response
             ai_response = generate_ollama_response(ollama_model_name, messages)
         except Exception as e:
-            ai_response = f"An error occurred while communicating with Ollama: {e}"
+            ai_response = f"An error occurred while communicating with Datanacci: {e}"
         
         chat_history.append([user_input, ai_response])
         return chat_history, "" # Clear user input box
@@ -564,12 +564,12 @@ def create_enhanced_rss_viewer():
     # Initial population of Ollama models
     OLLAMA_MODELS.extend(get_ollama_models())
     if not OLLAMA_MODELS:
-        OLLAMA_MODELS.append("No models found. Run `ollama run <model_name>`")
+        OLLAMA_MODELS.append("No models found. Run `Datanacci run <model_name>`")
 
     # Create Gradio interface
     with gr.Blocks(title="Advanced RSS Feed Viewer", theme=gr.themes.Soft()) as app:
         gr.Markdown("# 📰 Advanced RSS Feed Viewer")
-        gr.Markdown("Monitor and view RSS feeds from various sources with integrated local Ollama LLM chat.")
+        gr.Markdown("Monitor and view RSS feeds from various sources with integrated local Datanacci chat.")
         
         with gr.Tabs():
             # Dynamically create a tab for each category
@@ -654,16 +654,16 @@ def create_enhanced_rss_viewer():
                         gr.Markdown("**Version:** 1.0.0")
                         gr.Markdown("---")
                         gr.Markdown("#### Ollama Status")
-                        ollama_status_display = gr.HTML(label="Ollama Server Status")
+                        ollama_status_display = gr.HTML(label="Datanacci Server Status")
 
                 # Function to check Ollama status
                 def check_ollama_status():
                     try:
                         models = ollama.list()
                         num_models = len(models.get('models', []))
-                        return f"<p style='color: green;'>✅ Ollama Server is Running!</p><p>Available Models: {num_models}</p>"
+                        return f"<p style='color: green;'>✅ Datanacci.blockchain is Running!</p><p>Available Models: {num_models}</p>"
                     except Exception as e:
-                        return f"<p style='color: red;'>❌ Ollama Server Not Reachable. Error: {e}</p><p>Please ensure Ollama is installed and running (`ollama serve`).</p>"
+                        return f"<p style='color: red;'>❌ Datanacci Server Not Reachable. Error: {e}</p><p>Please ensure Ollama is installed and running (`ollama serve`).</p>"
 
                 app.load(
                     fn=check_ollama_status,
