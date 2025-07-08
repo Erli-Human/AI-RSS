@@ -651,7 +651,7 @@ def create_enhanced_rss_viewer():
                         gr.Markdown("#### System Info")
                         gr.Markdown(f"**Last Started:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                         gr.Markdown("**Status:** Datanacci Running")
-                        gr.Markdown("**Version:** 1.0.0")
+                        gr.Markdown("**Version:** 14.11.1")
                         gr.Markdown("---")
                         gr.Markdown("#### Datanacci.HelixEncoder Status")
                         ollama_status_display = gr.HTML(label="Datanacci Server Status")
