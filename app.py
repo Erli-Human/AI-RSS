@@ -608,7 +608,7 @@ def create_enhanced_rss_viewer():
                     )
                     ollama_model_dropdown = gr.Dropdown(
                         choices=OLLAMA_MODELS,
-                        label="Select Ollama Model",
+                        label="Select HelixEncoder Model",
                         interactive=True,
                         value=OLLAMA_MODELS[0] if OLLAMA_MODELS else None,
                         scale=1
