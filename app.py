@@ -1,24 +1,25 @@
 import gradio as gr
-from news_fetcher import get_news_from_urls
-from news_store import load_news, save_news
+from news_fetcher import get_news_from_urls, save_news, load_news
 import ollama
+import schedule
 import time
 
-# Define RSS feed URLs (you can make this configurable in the UI)
-RSS_URLS = [
-    "https://www.bbc.com/news/rss.xml",
-    "https://feeds.bbci.co.uk/news/world/rss.xml"
-]
+# Schedule to fetch news every 60 minutes (adjust as needed)
+schedule.every(60).minutes.do(lambda: update_news())
 
-
-def refresh_news():
-    """Refreshes news articles from RSS feeds and saves them."""
+def update_news():
+    """Fetches and saves the latest news articles."""
+    urls = [
+        "https://www.reuters.com/technology/",
+        "https://www.bbc.com/news/technology",
+        "https://techcrunch.com/"
+    ]
     try:
-        articles = get_news_from_urls(RSS_URLS)
-        save_news(articles)
-        return "News refreshed successfully!"
+        news = get_news_from_urls(urls)
+        save_news(news)
+        print("News updated successfully!")
     except Exception as e:
-        return f"Error refreshing news: {e}"
+        print(f"Error updating news: {e}")
 
 def chat_with_ollama(message, history):
     """Chats with the Ollama model using the loaded news articles."""
@@ -29,7 +30,7 @@ def chat_with_ollama(message, history):
         prompt = f"{context}\n\nUser: {message}"
 
         try:
-            response = ollama.chat(model='datanacci-rss-model', messages=[{"role": "user", "content": prompt}])
+            response = ollama.chat(model='datanacci-rss-model', messages=[{"role": "user", "content": prompt}])  # No API key needed
             bot_message = response['message']['content']
             history.append((message, bot_message))
             return history
@@ -40,15 +41,20 @@ def chat_with_ollama(message, history):
         return history + [(message, f"Error loading news or processing chat request: {e}")]
 
 
-with gr.Blocks() as demo:
-    chatbot = gr.Chatbot()
-    msg = gr.Textbox(label="Enter your message")
-    refresh_button = gr.Button("Refresh News")
-    clear_button = gr.ClearButton([msg, chatbot])
+if __name__ == "__main__":
+    # Initial news fetch on startup
+    update_news()
 
-    refresh_button.click(refresh_news)
-    msg.submit(chat_with_ollama, [msg, chatbot], chatbot)
+    with gr.Blocks() as demo:
+        chatbot = gr.Chatbot()
+        msg = gr.Textbox(label="Enter your message")
+        clear = gr.Button("Clear")
 
+        def respond(message, chat_history):
+            bot_message = chat_with_ollama(message, chat_history)
+            return bot_message
 
-if __name__ == '__main__':
+        msg.submit(respond, [msg, chatbot], chatbot)
+        clear.click(lambda: None, inputs=msg, outputs=msg)
+
     demo.launch()
