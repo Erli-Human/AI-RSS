@@ -1,24 +1,29 @@
 import gradio as gr
-from feedparser import parseRSSFeed
+import feedparser
 import requests
 from bs4 import BeautifulSoup
+import lxml
 from datetime import datetime
-import dateutil.parser
-import ollama
-import aiohttp
-import typing
 import urllib3
 import certifi
 import charset_normalizer
 import idna
 import schedule
+import ollama
 
-# Define your RSS feeds here
-RSS_FEEDS = {
-    "Tech": "https://www.theverge.com/rss/index.xml",
-    "AI": "https://ai.googleblog.com/rss",
-    "Blockchain": "https://blockonomi.com/feed/",
-}
+def parseRSSFeed(url):
+    """Parses an RSS feed from a given URL."""
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+        feed = feedparser.parse(response.text)
+        return feed
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching RSS feed from {url}: {e}")
+        return None
+    except Exception as e:
+        print(f"Error parsing RSS feed from {url}: {e}")
+        return None
 
 def format_category_feeds_html(category_name):
     """Formats the RSS feeds for a given category into an HTML string."""
@@ -27,6 +32,8 @@ def format_category_feeds_html(category_name):
 
     try:
         feed = parseRSSFeed(RSS_FEEDS[category_name])
+        if feed is None:
+            return "<p>Failed to load feed for this category.</p>"
         html = "<h2>" + category_name + "</h2><ul>"
         for entry in feed.entries[:5]:  # Limit to 5 entries for brevity
             title = entry.title
@@ -44,6 +51,9 @@ def chat_with_feeds(chatbot, msg, category_name, ollama_model):
     """Chats with the selected RSS feed using Ollama."""
     try:
         feed = parseRSSFeed(RSS_FEEDS[category_name])
+        if feed is None:
+            return chatbot + [[None, "Failed to load feed for this category."]], ""
+
         context = ""
         for entry in feed.entries[:5]:  # Use only 5 entries for context
             context += f"Title: {entry.title}\nSummary: {entry.summary}\n\n"
@@ -112,5 +122,10 @@ def create_enhanced_rss_viewer():
 
 
 if __name__ == "__main__":
+    RSS_FEEDS = {
+        "Tech": "https://www.theverge.com/rss/index.xml",
+        "AI": "https://ai.googleblog.com/rss",
+        "Blockchain": "https://blockonomi.com/feed/",
+    }
     app = create_enhanced_rss_viewer()
     app.launch()
