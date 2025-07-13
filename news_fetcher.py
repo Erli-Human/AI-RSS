@@ -1,76 +1,71 @@
 import feedparser
-import requests
 from bs4 import BeautifulSoup
-import datetime
-import time
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# Load API key from environment variables
-api_key = os.getenv("OPENAI_API_KEY")
-
-
-def fetch_news(url):
-    """Fetches news articles from an RSS feed URL."""
-    try:
-        feed = feedparser.parse(url)
-        articles = []
-        for entry in feed.entries:
-            article = {
-                'title': entry.title,
-                'link': entry.link,
-                'summary': entry.summary,  # Or use description if summary is missing
-                'published': datetime.datetime(*entry.published_parsed[:6]) if hasattr(entry, 'published_parsed') else None
-            }
-            articles.append(article)
-        return articles
-    except Exception as e:
-        print(f"Error fetching news from {url}: {e}")
-        return []
+import requests
+import json
+from datetime import datetime
+from dateutil import parser
 
 def scrape_content(url):
-    """Scrapes the full content of an article from its URL."""
+    """Scrapes the content from a given URL using Beautiful Soup."""
     try:
         response = requests.get(url)
         response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        # Adapt this selector to the specific website's HTML structure!
-        article_text = soup.find('div', class_='article-body').get_text() # Example: find a div with class "article-body"
-        return article_text
-    except Exception as e:
-        print(f"Error scraping content from {url}: {e}")
-        return None
+        # Example selectors - adjust these based on the website's HTML structure
+        articles = soup.find_all('article') # Adjust this selector!
 
-def process_articles(articles):
-    """Processes articles, potentially scraping full content."""
-    for article in articles:
-        if not article['summary']:  # If summary is empty, try to scrape
-            full_content = scrape_content(article['link'])
-            if full_content:
-                article['summary'] = full_content
-    return articles
+        news_items = []
+        for article in articles:
+            try:
+                title_element = article.find('h2') or article.find('h1')  # Try h2 first, then h1
+                if not title_element:
+                    continue # Skip if no title is found
+
+                title = title_element.text.strip()
+                link_element = article.find('a')
+                if link_element:
+                    link = link_element['href']
+                    # Handle relative links
+                    if not link.startswith("http"):
+                        link = url + link  # Assuming the base URL is correct
+
+                    summary_element = article.find('p') # Adjust this selector!
+                    summary = summary_element.text.strip() if summary_element else "No summary available."
+
+                    news_items.append({
+                        'title': title,
+                        'link': link,
+                        'summary': summary,
+                        'published': datetime.now().isoformat()  # Use current time as a placeholder
+                    })
+            except Exception as e:
+                print(f"Error processing article on {url}: {e}")
+
+        return news_items
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching URL {url}: {e}")
+        return []
+
 
 def get_news_from_urls(urls):
-    """Fetches and processes news from multiple URLs."""
-    all_articles = []
+    """Fetches news from multiple URLs and combines the results."""
+    all_news = []
     for url in urls:
-        articles = fetch_news(url)
-        if articles:
-            processed_articles = process_articles(articles)
-            all_articles.extend(processed_articles)
-    return all_articles
+        news = scrape_content(url)
+        all_news.extend(news)
+    return all_news
 
-# Example usage (for testing):
-if __name__ == '__main__':
-    urls = [
-        "https://www.bbc.com/news/rss.xml",  # Replace with your desired RSS feeds
-        "https://feeds.bbci.co.uk/news/world/rss.xml"
-    ]
-    news_articles = get_news_from_urls(urls)
-    for article in news_articles:
-        print(f"Title: {article['title']}")
-        print(f"Summary: {article['summary'][:100]}...") # Print first 100 chars of summary
-        print("-" * 20)
+def save_news(news, filename="news_data.json"):
+    """Saves news articles to a JSON file."""
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(news, f, indent=4)
+
+def load_news(filename="news_data.json"):
+    """Loads news articles from a JSON file."""
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
