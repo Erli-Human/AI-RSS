@@ -1,8 +1,11 @@
 gradio==4.5.0
 ollama
+aiohttp
 feedparser
 python-dateutil==2.8.2
-requests==2.31.0  # Needed for potential URL handling within the feed
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
 typing-extensions
 urllib3==2.0.7
 certifi==2023.11.17
