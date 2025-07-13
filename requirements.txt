@@ -1,9 +1,16 @@
 gradio==4.5.0
-ollama
+ollama>=0.1.37  # Specify a minimum version for compatibility
+aiohttp
 feedparser
 python-dateutil==2.8.2
 requests==2.31.0
 beautifulsoup4==4.12.2
 lxml==4.9.3
 typing-extensions
+urllib3==2.0.7
+certifi==2023.11.17
+charset-normalizer==3.3.2
+idna==3.6
 schedule
+python-dotenv  # For loading .env file
+tiktoken
