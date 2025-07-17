@@ -94,8 +94,7 @@ RSS_FEEDS = {
         "TechRadar": "https://www.techradar.com/rss"
     },
     
-    "afenCRYPTO": {
-        # Original feeds (kept)
+    "afenCHALLENGE": {
         "CoinTelegraph": "https://cointelegraph.com/rss",
         "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
         "Decrypt": "https://decrypt.co/feed",
@@ -131,15 +130,6 @@ RSS_FEEDS = {
         "CryptoPotato": "https://cryptonpotato.com/feed",
         "Daily Hodl": "https://dailyhodl.com/feed",
         "BeInCrypto": "https://beincrypto.com/feed",
-        
-        # CryptoPanic RSS feed (the aggregator itself)
-        "CryptoPanic": "https://cryptopanic.com/news/rss/"
-    },
-    
-    "📊 DATA SCIENCE": {
-        "KDnuggets": "https://www.kdnuggets.com/feed",
-        "Analytics Vidhya": "https://www.analyticsvidhya.com/feed/",
-        "Towards Data Science": "https://towardsdatascience.com/feed"
     },
     
     "🌍 WORLD NEWS": {
@@ -159,7 +149,7 @@ RSS_FEEDS = {
         "Behance": "https://feeds.feedburner.com/behance/vorr",
         "Dribbble": "https://dribbble.com/shots/popular.rss",
         "Creative Bloq": "https://www.creativebloq.com/feed",
-        "Smashing Magazine": "https://www.smashingmagazine.com/feed/"
+        "Smashing Magazine": "https://www.smashingmagazine.com/rss/all"
     },
     
     "🌱 ENVIRONMENT & SUSTAINABILITY": {
@@ -365,7 +355,7 @@ def create_enhanced_rss_viewer():
             }}
             .article-item h4 {{
                 margin-top: 0;
-                margin-bottom: 10px;
+                margin-bottom: 5px;
                 font-size: 1.0em; /* Slightly smaller font for compactness */
                 line-height: 1.3;
             }}
@@ -483,7 +473,7 @@ def create_enhanced_rss_viewer():
         for human_msg, ai_msg in chat_history:
             messages.append({"role": "user", "content": human_msg})
             messages.append({"role": "assistant", "content": ai_msg})
-
+        
         try:
             ai_response = generate_ollama_response(ollama_model_name, messages)
         except Exception as e:
@@ -491,6 +481,7 @@ def create_enhanced_rss_viewer():
         
         chat_history.append([user_input, ai_response])
         return chat_history, "" # Clear user input box
+
 
     # Initial population of Ollama models
     OLLAMA_MODELS.extend(get_ollama_models())
