@@ -94,7 +94,8 @@ RSS_FEEDS = {
         "TechRadar": "https://www.techradar.com/rss"
     },
     
-    "afenCHALLENGE": {
+    "afenCRYPTO": {
+        # Original feeds (kept)
         "CoinTelegraph": "https://cointelegraph.com/rss",
         "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
         "Decrypt": "https://decrypt.co/feed",
