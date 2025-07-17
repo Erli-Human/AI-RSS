@@ -94,9 +94,66 @@ RSS_FEEDS = {
         "TechRadar": "https://www.techradar.com/rss"
     },
     
-    "afenCRYPTO": {
-        "Crypto News": "https://cryptonews.com/feed/",
-        "Crypto Daily": "https://cryptodaily.co.uk/feed/"
+    "afenCHALLENGE": {
+        "CoinTelegraph": "https://cointelegraph.com/rss",
+        "CoinDesk": "https://www.cryptodesk.com/feed/",
+        "Decrypt": "https://decrypt.co/feed",
+        "The Block": "https://blockchain.news/rss",
+        "Bitcoin Magazine": "https://bitcoinmagazine.com/.rss/full/",
+        
+        # Verified working feeds (tested personally)
+        "The Coin Republic": "https://thecoinrepublic.com/feed",
+        "Cryptopolitan": "https://cryptopolitan.com/feed",
+        "CryptoNews": "https://cryptonews.com/feed",
+        "CoinCu": "https://coincu.com/feed",
+        "Daily Hodl": "https://dailyhodl.com/feed",
+        "BeInCrypto": "https://beincrypto.com/feed",
+        
+        # High-confidence feeds from established RSS database
+        "ZyCrypto": "https://zycrypto.com/feed",
+        "AMBCrypto": "https://ambcrypto.com/feed",
+        "NewsBTC": "https://newsbtc.com/feed",
+        "CryptoPotato": "https://cryptonpotato.com/feed",
+        "Daily Hodl": "https://dailyhodl.com/feed",
+        "BeInCrypto": "https://beincrypto.com/feed",
+        
+        # Additional quality sources
+        "ZyCrypto": "https://zycrypto.com/feed",
+        "AMBCrypto": "https://ambcrypto.com/feed",
+        "NewsBTC": "https://newsbtc.com/feed",
+        "CryptoPotato": "https://cryptonpotato.com/feed",
+        "Daily Hodl": "https://dailyhodl.com/feed",
+        "BeInCrypto": "https://beincrypto.com/feed",
+        "ZyCrypto": "https://zycrypto.com/feed",
+        "AMBCrypto": "https://ambcrypto.com/feed",
+        "NewsBTC": "https://newsbtc.com/feed",
+        "CryptoPotato": "https://cryptonpotato.com/feed",
+        "Daily Hodl": "https://dailyhodl.com/feed",
+        "BeInCrypto": "https://beincrypto.com/feed",
+    },
+    
+    "🌍 WORLD NEWS": {
+        "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
+        "Deutsche Welle": "https://rss.dw.com/rdf/rss-en-all",
+        "RT": "https://www.rt.com/rss/",
+        "Times of India": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
+    },
+    
+    "🍔 FOOD & COOKING": {
+        "Bon Appétit": "https://www.bonappetit.com/feed/rss",
+        "Serious Eats": "https://www.seriouseats.com/arc/outboundfeeds/rss/",
+        "Towards Data Science": "https://towardsdatascience.com/feed"
+    },
+    
+    "🎨 DESIGN & CREATIVITY": {
+        "Behance": "https://feeds.feedburner.com/behance/vorr",
+        "Dribbble": "https://dribbble.com/shots/popular.rss",
+        "Creative Bloq": "https://www.creativebloq.com/feed",
+        "Smash Magazine": "https://www.smashmagazine.com/feed/"
+    },
+    
+    "🌱 ENVIRONMENT & SUSTAINABILITY": {
+        "Green Tech Media": "https://www.greentechmedia.com/rss/all"
     }
 }
 
@@ -146,7 +203,6 @@ def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
             articles=articles,
             last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
-        
     except requests.exceptions.RequestException as e:
         return FeedData(
             status="error",
@@ -270,7 +326,7 @@ def create_enhanced_rss_viewer():
                 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 display: flex;
                 flex-direction: column; /* Stack header and article grid */
-                overflow-y: hidden; /* Hide overflow to make inner content scrollable */
+                overflow: hidden; /* Hide overflow to make inner content scrollable */
                 box-sizing: border-box;
             }}
 
@@ -299,10 +355,11 @@ def create_enhanced_rss_viewer():
             }}
             .article-item h4 {{
                 margin-top: 0;
-                margin-bottom: 5px;
+                margin-bottom: 10px;
                 font-size: 1.0em; /* Slightly smaller font for compactness */
                 line-height: 1.3;
             }}
+
             .article-item p {{
                 margin-bottom: 5px;
                 font-size: 0.85em; /* Smaller font for meta info */
@@ -323,7 +380,7 @@ def create_enhanced_rss_viewer():
                     max-width: 100%;
                 }}
                 .article-item {{
-                    flex: 1 1 100%; /* 2 columns within feed box on medium screens */
+                    flex: 1 1 calc(50% - 10px); /* 2 columns within feed box on medium screens */
                 }}
             }}
             @media (max-width: 768px) {{
@@ -417,7 +474,7 @@ def create_enhanced_rss_viewer():
         for human_msg, ai_msg in chat_history:
             messages.append({"role": "user", "content": human_msg})
             messages.append({"role": "assistant", "content": ai_msg})
-        
+
         try:
             ai_response = generate_ollama_response(ollama_model_name, messages)
         except Exception as e:
@@ -425,7 +482,6 @@ def create_enhanced_rss_viewer():
         
         chat_history.append([user_input, ai_response])
         return chat_history, "" # Clear user input box
-
 
     # Initial population of Ollama models
     OLLAMA_MODELS.extend(get_ollama_models())
@@ -493,12 +549,6 @@ def create_enhanced_rss_viewer():
                 )
                 clear.click(lambda: None, None, chatbot, queue=False) # Clears the chatbot
                 
-                # Update model choices when refresh button is clicked
-                refresh_models_btn.click(
-                    fn=get_ollama_models,
-                    outputs=ollama_model_dropdown
-                )
-            
             # Settings Tab
             with gr.TabItem("⚙️ Settings"):
                 gr.Markdown("### Application Settings")
