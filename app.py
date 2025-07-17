@@ -1,131 +1,148 @@
-import gradio as gr
 import feedparser
-import requests
-from bs4 import BeautifulSoup
-import lxml
+import gradio as gr
 from datetime import datetime
-import urllib3
-import certifi
-import charset_normalizer
-import idna
-import schedule
-import ollama
 
-def parseRSSFeed(url):
-    """Parses an RSS feed from a given URL."""
+# Define a function to fetch articles from a given URL
+def fetch_articles(url):
     try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-        feed = feedparser.parse(response.text)
-        return feed
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching RSS feed from {url}: {e}")
-        return None
+        # Parse the RSS feed
+        feed = feedparser.parse(url)
+        
+        if feed.bozo:
+            return "Error: Invalid RSS feed or URL not accessible", pd.DataFrame()
+        
+        # Extract feed information
+        feed_title = feed.feed.get('title', 'Unknown Feed')
+        feed_description = feed.feed.get('description', 'No description available')
+        
+        # Extract entries
+        articles = []
+        for entry in feed.entries[:15]:  # Increased to 15 most recent entries
+            article_data = {
+                'Title': entry.get('title', 'No title'),
+                'Link': entry.get('link', 'No link'),
+                'Published': entry.get('published', 'No date'),
+                'Summary': entry.get('summary', 'No summary')[:300] + '...' if len(entry.get('summary', '')) > 300 else entry.get('summary', 'No summary')
+            }
+            articles.append(article_data)
+        
+        # Create DataFrame for better display
+        df = pd.DataFrame(articles)
+        
+        feed_info = f"**Feed:** {feed_title}\n**Description:** {feed_description}\n**Total Articles:** {len(entries)}\n**Feed URL:** {url}"
+        
+        return feed_info, df
+        
     except Exception as e:
-        print(f"Error parsing RSS feed from {url}: {e}")
-        return None
+        return f"Error fetching RSS feed: {str(e)}", pd.DataFrame()
 
-def format_category_feeds_html(category_name):
-    """Formats the RSS feeds for a given category into an HTML string."""
-    if category_name not in RSS_FEEDS:
-        return "<p>Category not found.</p>"
-
-    try:
-        feed = parseRSSFeed(RSS_FEEDS[category_name])
-        if feed is None:
-            return "<p>Failed to load feed for this category.</p>"
-        html = "<h2>" + category_name + "</h2><ul>"
-        for entry in feed.entries[:5]:  # Limit to 5 entries for brevity
-            title = entry.title
-            link = entry.link
-            summary = entry.summary
-            published = datetime(*entry.published_parsed[:6]) if hasattr(entry, 'published_parsed') else "Date Unavailable"
-
-            html += f'<li><a href="{link}" target="_blank">{title}</a> - {published}<br>{summary}</li>'
-        html += "</ul>"
-        return html
-    except Exception as e:
-        return f"<p>Error fetching feeds for {category_name}: {e}</p>"
-
-def chat_with_feeds(chatbot, msg, category_name, ollama_model):
-    """Chats with the selected RSS feed using Ollama."""
-    try:
-        feed = parseRSSFeed(RSS_FEEDS[category_name])
-        if feed is None:
-            return chatbot + [[None, "Failed to load feed for this category."]], ""
-
-        context = ""
-        for entry in feed.entries[:5]:  # Use only 5 entries for context
-            context += f"Title: {entry.title}\nSummary: {entry.summary}\n\n"
-
-        if not context:
-            return chatbot + [[None, "No articles found in this category."]], ""
-
-        try:
-            response = ollama.chat(model=ollama_model, messages=[{"role": "user", "content": f"Summarize the following news articles and answer my question:\n{context}\nQuestion: {msg}"}])
-            answer = response['message']['content']
-            chatbot += [[msg, answer]]
-        except Exception as e:
-            chatbot += [[msg, f"Error communicating with Ollama: {e} Please ensure Ollama is running (`ollama serve`)."]]
-
-        return chatbot, ""  # Return the updated chatbot and clear the input box
-
-    except Exception as e:
-        chatbot += [[msg, f"Error fetching or processing feeds: {e}"]]
-        return chatbot, ""
-
-
-def update_ollama_status():
-    """Updates the Ollama status display in the Gradio interface."""
-    try:
-        models = ollama.list()
-        num_models = len(models.get('models', []))
-        status_html = f"<p style='color: green;'>✅ Datanacci.blockchain is Running!</p><p>Available Models: {num_models}</p>"
-    except Exception as e:
-        status_html = f"<p style='color: red;'>❌ Datanacci Server Not Reachable. Error: {e}</p><p>Please ensure Ollama is installed and running (`ollama serve`).</p>"
-
-    # Find the HTML element in the Gradio interface and update its content
-    for component in app.get_components():
-        if isinstance(component, gr.HTML) and "Datanacci Server Status" in component.label:
-            component.value = status_html
-            break
-
-
-def create_enhanced_rss_viewer():
-    with gr.Blocks() as app:
-        gr.Markdown("# Datanacci RSS Chat Agent")
-
-        with gr.TabItem("Chat with Feeds"):
-            chat_category_select = gr.Dropdown(choices=list(RSS_FEEDS.keys()), label="Select Category", value=list(RSS_FEEDS.keys())[0] if list(RSS_FEEDS.keys()) else None)
-
+# Define the Gradio interface
+with gr.Blocks(title="RSS Feed Helper") as app:
+    gr.Markdown("# 📰 RSS Feed Helper")
+    
+    with gr.Row():
+        with gr.Column(scale=1):
+            gr.Markdown("### 🎯 Quick Select")
+            preset_dropdown = gr.Dropdown(
+                choices=get_all_feeds_list(),
+                label="Choose from Curated Feeds",
+                info="Select from our comprehensive collection of RSS feeds",
+                interactive=True
+            )
+            load_preset_btn = gr.Button("📥 Load Selected Feed", variant="primary")
+            
+            gr.Markdown("### 🔗 Custom URL")
+            url_input = gr.Textbox(
+                label="RSS Feed URL",
+                placeholder="https://example.com/rss.xml",
+                info="Enter any valid RSS feed URL"
+            )
+            
             with gr.Row():
-                chatbot = gr.Chatbot(label="RSS Chat")  # Output component!
-                msg = gr.Textbox(label="Your Question", placeholder="e.g., What are the latest AI advancements?") # Input Component!
-
-            clear = gr.Button("Clear Chat")
-
-            ollama_model_select = gr.Dropdown(choices=[m['name'] for m in ollama.list()['models']], label="Select Ollama Model", value=list(ollama.list()['models'])[0]['name'] if list(ollama.list()['models']) else "mistral")
-
-            msg.submit(chat_with_feeds, [chatbot, msg, chat_category_select, gr.State(ollama_model_select)], [chatbot, msg]) # Pass ollama model as state
-            clear.click(lambda: None, None, chatbot, queue=False)
-
-
-        with gr.TabItem("Settings"):
-            status_html = "<p>Loading status...</p>"  # Initial status message
-            status_display = gr.HTML(label="Datanacci Server Status", value=status_html)
-
-        schedule.every(10).seconds.do(update_ollama_status)
-
-
-    return app  # Return the interface object!
-
-
+                fetch_btn = gr.Button("🔄 Fetch RSS Feed", variant="primary")
+                clear_btn = gr.Button("🗑️ Clear", variant="secondary")
+            
+            gr.Markdown("### 🔍 Search Articles")
+            search_input = gr.Textbox(
+                label="Search Keywords",
+                placeholder="Enter keywords to search in titles and summaries...",
+                info="Search is case-insensitive"
+            )
+            
+            with gr.Row():
+                search_btn = gr.Button("🔍 Search", variant="secondary")
+                clear_search_btn = gr.Button("❌ Clear Search", variant="secondary")
+    
+        with gr.Column(scale=2):
+            feed_info = gr.Markdown("### Feed Information\nSelect a preset feed or enter an RSS URL to get started.")
+            
+            articles_table = gr.Dataframe(
+                headers=['Title', 'Link', 'Published', 'Summary'],
+                interactive=False,
+                wrap=True,
+                height=500,
+                label="Articles"
+            )
+    
+    # Store the original dataframe for searching
+    original_df = gr.State(pd.DataFrame())
+    
+    # Event handlers
+    load_preset_btn.click(
+        fn=load_preset_feed,
+        inputs=[preset_dropdown],
+        outputs=[url_input, feed_info, articles_table, original_df]
+    )
+    
+    fetch_btn.click(
+        fn=fetch_rss_feed,
+        inputs=[url_input],
+        outputs=[feed_info, articles_table]
+    ).then(
+        fn=lambda df: df,
+        inputs=[articles_table],
+        outputs=[original_df]
+    )
+    
+    search_btn.click(
+        fn=search_entries,
+        inputs=[original_df, search_input],
+        outputs=[articles_table]
+    )
+    
+    clear_search_btn.click(
+        fn=clear_search,
+        inputs=[original_df],
+        outputs=[articles_table, search_input]
+    )
+    
+    clear_btn.click(
+        fn=lambda: ("### Feed Information\nSelect a preset feed or enter an RSS URL to get started.", pd.DataFrame(), pd.DataFrame(), "", ""),
+        outputs=[feed_info, articles_table, original_df, search_input, url_input]
+    )
+    
+    # Allow Enter key to trigger fetch
+    url_input.submit(
+        fn=fetch_rss_feed,
+        inputs=[url_input],
+        outputs=[feed_info, articles_table]
+    ).then(
+        fn=lambda df: df,
+        inputs=[articles_table],
+        outputs=[original_df]
+    )
+    
+    # Allow Enter key to trigger search
+    search_input.submit(
+        fn=search_entries,
+        inputs=[original_df, search_input],
+        outputs=[articles_table]
+    )
 
 if __name__ == "__main__":
-    RSS_FEEDS = {
-        "Tech": "https://www.theverge.com/rss/index.xml",
-        "AI": "https://ai.googleblog.com/rss",
-        "Blockchain": "https://blockonomi.com/feed/",
-    }
-    app = create_enhanced_rss_viewer()
-    app.launch()
+    app.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=False,
+        debug=True
+    )
