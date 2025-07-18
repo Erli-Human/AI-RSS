@@ -6,24 +6,26 @@ import requests
 
 # Define URLs for the models
 whisper_encoder_model_url = "https://huggingface.co/onnx-community/whisper-base-ONNX/resolve/main/onnx/encoder_model.onnx"
-whisper_decoder_model_url = "https://huggingface.co/onnx-community/whisper-base-ONNX/resolve/main/onnx/decoder_model.onnx"  # Make sure to use the correct decoder model link if available
-smollm_model_url = "https://huggingface.co/HuggingFaceTB/SmolLM3-3B-ONNX/resolve/main/onnx/model.onnx"  # Updated SmolLM model link
-kokoro_model_url = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model.onnx"  # Updated Kokoro model link
+whisper_decoder_model_url = "https://huggingface.co/onnx-community/whisper-base-ONNX/resolve/main/onnx/decoder_model.onnx"
+smollm_model_url = "https://huggingface.co/HuggingFaceTB/SmolLM3-3B-ONNX/resolve/main/onnx/model.onnx"
+kokoro_model_url = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model.onnx"
 
 # Define local paths for the models
 whisper_encoder_model_path = "encoder_model.onnx"
 whisper_decoder_model_path = "decoder_model.onnx"
-smollm_model_path = "smollm_model.onnx"  # Local filename for SmolLM model
+smollm_model_path = "smollm_model.onnx"
 kokoro_model_path = "kokoro_model.onnx"
 
 # Function to download a file
 def download_file(url, dest_path):
-    response = requests.get(url)
-    if response.status_code == 200:
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an error if the request failed
         with open(dest_path, 'wb') as f:
             f.write(response.content)
-    else:
-        raise Exception(f"Failed to download {url}: Status Code {response.status_code}")
+        print(f"Downloaded {dest_path}")
+    except Exception as e:
+        print(f"Error downloading {url}: {e}")
 
 # Function to check and download models
 def download_models():
@@ -50,11 +52,19 @@ def download_models():
 # Download models upon starting the app
 download_models()
 
+# Initialize ONNX Runtime sessions and handle errors
+def initialize_model(model_path):
+    try:
+        return ort.InferenceSession(model_path)
+    except Exception as e:
+        print(f"Failed to initialize model at {model_path}: {e}")
+        return None
+
 # Initialize ONNX Runtime sessions
-encoder_session = ort.InferenceSession(whisper_encoder_model_path)
-decoder_session = ort.InferenceSession(whisper_decoder_model_path)
-smollm_session = ort.InferenceSession(smollm_model_path)
-kokoro_session = ort.InferenceSession(kokoro_model_path)
+encoder_session = initialize_model(whisper_encoder_model_path)
+decoder_session = initialize_model(whisper_decoder_model_path)
+smollm_session = initialize_model(smollm_model_path)
+kokoro_session = initialize_model(kokoro_model_path)
 
 # Function for Whisper model to transcribe audio
 def whisper_transcribe(audio):
@@ -80,14 +90,13 @@ def generate_text(prompt):
     if not prompt:
         return "No prompt provided."
     
-    # Encode the input text appropriately for your model
     input_ids = np.array([ord(c) for c in prompt]).reshape(1, -1)  # Adjust based on your text encoding strategy
     input_name = smollm_session.get_inputs()[0].name
     output = smollm_session.run(None, {input_name: input_ids})
     generated_text = ''.join(chr(id) for id in output[0][0])  # Adjust according to your model's output needs
     return generated_text
 
-# Function for Kokoro model (if needed)
+# Function for Kokoro model
 def run_kokoro(input_text):
     if not input_text:
         return "No input text provided."
