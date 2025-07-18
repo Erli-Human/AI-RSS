@@ -27,18 +27,25 @@ def download_file(url, dest_path):
 
 # Function to check and download models
 def download_models():
-    if not os.path.exists(whisper_encoder_model_path):
-        print(f"{whisper_encoder_model_path} does not exist. Downloading...")
-        download_file(whisper_encoder_model_url, whisper_encoder_model_path)
-    if not os.path.exists(whisper_decoder_model_path):
-        print(f"{whisper_decoder_model_path} does not exist. Downloading...")
-        download_file(whisper_decoder_model_url, whisper_decoder_model_path)
-    if not os.path.exists(smollm_model_path):
-        print(f"{smollm_model_path} does not exist. Downloading...")
-        download_file(smollm_model_url, smollm_model_path)
-    if not os.path.exists(kokoro_model_path):
-        print(f"{kokoro_model_path} does not exist. Downloading...")
-        download_file(kokoro_model_url, kokoro_model_path)
+    model_paths = {
+        "encoder": whisper_encoder_model_path,
+        "decoder": whisper_decoder_model_path,
+        "smollm": smollm_model_path,
+        "kokoro": kokoro_model_path
+    }
+    model_urls = {
+        "encoder": whisper_encoder_model_url,
+        "decoder": whisper_decoder_model_url,
+        "smollm": smollm_model_url,
+        "kokoro": kokoro_model_url
+    }
+
+    for key in model_paths:
+        if not os.path.exists(model_paths[key]):
+            print(f"{model_paths[key]} does not exist. Downloading...")
+            download_file(model_urls[key], model_paths[key])
+        else:
+            print(f"{model_paths[key]} already exists.")
 
 # Download models upon starting the app
 download_models()
@@ -51,42 +58,44 @@ kokoro_session = ort.InferenceSession(kokoro_model_path)
 
 # Function for Whisper model to transcribe audio
 def whisper_transcribe(audio):
-    if audio is None:
+    if audio is None or len(audio) == 0:
         return "No audio input provided."
 
     audio_data = np.frombuffer(audio, dtype=np.float32).flatten()
     
-    # Process through the encoder
+    # Ensure the encoder expects the correct input size
     encoder_input_name = encoder_session.get_inputs()[0].name
     encoder_output = encoder_session.run(None, {encoder_input_name: audio_data})
     
     # Process through the decoder
     decoder_input_name = decoder_session.get_inputs()[0].name
     decoder_output = decoder_session.run(None, {decoder_input_name: encoder_output[0]})
-    
-    transcription = decoder_output[0]  # Adjust based on the actual model output format
+
+    # Return the transcription - this must match the output of your decoder
+    transcription = decoder_output[0]  # Adjust according to your model's output needs
     return transcription
 
 # Function for Smollm model for text generation
 def generate_text(prompt):
     if not prompt:
         return "No prompt provided."
-
-    input_ids = np.array([ord(c) for c in prompt]).reshape(1, -1)  # Adjust based on encoding
+    
+    # Encode the input text appropriately for your model
+    input_ids = np.array([ord(c) for c in prompt]).reshape(1, -1)  # Adjust as necessary
     input_name = smollm_session.get_inputs()[0].name
     output = smollm_session.run(None, {input_name: input_ids})
-    generated_text = ''.join(chr(id) for id in output[0][0])  # Adjust accordingly
+    generated_text = ''.join(chr(id) for id in output[0][0])  # Adjust according to your model's output needs
     return generated_text
 
 # Function for Kokoro model (if needed)
 def run_kokoro(input_text):
     if not input_text:
         return "No input text provided."
-
-    input_ids = np.array([ord(c) for c in input_text]).reshape(1, -1)  # Adjust based on encoding
+    
+    input_ids = np.array([ord(c) for c in input_text]).reshape(1, -1)  # Adjust accordingly
     input_name = kokoro_session.get_inputs()[0].name
     output = kokoro_session.run(None, {input_name: input_ids})
-    output_text = ''.join(chr(id) for id in output[0][0])  # Adjust based on Kokoro's output
+    output_text = ''.join(chr(id) for id in output[0][0])  # Adjust according to your model's output needs
     return output_text
 
 # Create a Gradio interface
