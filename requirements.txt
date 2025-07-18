@@ -1,40 +1,13 @@
-# Core Framework
-gradio>=4.44.0
-torch>=2.5.0
-torchvision>=0.20.0
-torchaudio>=2.5.0
-
-# Video Processing & AI
-yt-dlp
-ultralytics>=8.3.0
-opencv-python>=4.10.0
-librosa>=0.10.2
-ffmpeg-python>=0.2.0
-
-# Image Processing
-Pillow>=10.4.0
-numpy>=1.26.0
-matplotlib>=3.9.0
-
-# RSS & Web Processing
-feedparser>=6.0.11
-requests>=2.32.0
-aiohttp>=3.10.0
-beautifulsoup4>=4.12.3
-
-# Voice & Audio
-gTTS>=2.5.0
-speech-recognition
-pyaudio>=0.2.14
-
-# Data Processing
-pandas>=2.2.0
-sqlite3
-json5>=0.9.25
-
-# Utilities
-schedule>=1.2.2
-threading-timer>=0.1.1
-smtplib-ssl>=1.0.0
-dataclasses-json>=0.6.7
-asyncio>=3.4.3
+feedparser
+# Gradio web UI framework for the app
+gradio
+# HTTP requests for fetching RSS feeds
+requests
+# Scheduling library for periodic tasks
+schedule
+# Data handling and analysis
+pandas
+# Plotting (if needed for visualization)
+matplotlib
+# Ollama client for local LLM integration
+ollama
