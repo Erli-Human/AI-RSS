@@ -5,14 +5,14 @@ import os
 import requests
 
 # Define URLs for the models
-whisper_encoder_model_url = "https://huggingface.co/openai/whisper-large-v2/resolve/main/encoder.onnx"
-whisper_decoder_model_url = "https://huggingface.co/openai/whisper-large-v2/resolve/main/decoder.onnx"
+whisper_encoder_model_url = "https://huggingface.co/onnx-community/whisper-base-ONNX/resolve/main/onnx/encoder_model.onnx"
+whisper_decoder_model_url = "https://huggingface.co/onnx-community/whisper-base-ONNX/resolve/main/onnx/decoder_model.onnx"  # Make sure to use the correct decoder model link if available
 smollm_model_url = "https://huggingface.co/{your_smollm_model}/resolve/main/model.onnx"  # Replace with the actual Smollm model link
 kokoro_model_url = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model.onnx"
 
 # Define local paths for the models
-whisper_encoder_model_path = "encoder.onnx"
-whisper_decoder_model_path = "decoder.onnx"
+whisper_encoder_model_path = "encoder_model.onnx"
+whisper_decoder_model_path = "decoder_model.onnx"
 smollm_model_path = "smollm.onnx"
 kokoro_model_path = "kokoro_model.onnx"
 
