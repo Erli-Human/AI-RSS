@@ -19,9 +19,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import ollama
 
-# ——————————————————————————
-# RSS Feed Sources
-# ——————————————————————————
+——————————————————————————
+RSS Feed Sources
+——————————————————————————
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
         "Science Daily - AI": "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
@@ -37,12 +37,12 @@ RSS_FEEDS = {
         "MIT Technology Review": "https://www.technologyreview.com/feed/",
         "IEEE Spectrum": "https://spectrum.ieee.org/rss/fulltext"
     },
-    # … include all your other categories exactly as before …
+    # (add your other categories here)
 }
 
-# ——————————————————————————
-# CONFIGURATION PERSISTENCE
-# ——————————————————————————
+——————————————————————————
+CONFIGURATION PERSISTENCE
+——————————————————————————
 CONFIG_PATH = "rss_config.json"
 
 def load_config():
@@ -70,9 +70,9 @@ def save_config(cfg):
 
 RSS_CONFIG = load_config()
 
-# ——————————————————————————
-# DATA MODELS
-# ——————————————————————————
+——————————————————————————
+DATA MODELS
+——————————————————————————
 @dataclass
 class Article:
     title: str
@@ -91,9 +91,9 @@ class FeedData:
 
 GLOBAL_ARTICLE_CACHE: List[Article] = []
 
-# ——————————————————————————
-# RSS FETCHERS
-# ——————————————————————————
+——————————————————————————
+RSS FETCHERS
+——————————————————————————
 def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
     """Fetch and parse a single RSS feed."""
     try:
@@ -157,9 +157,9 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
                 )
     return results
 
-# ——————————————————————————
-# OLLAMA UTILITIES
-# ——————————————————————————
+——————————————————————————
+OLLAMA UTILITIES
+——————————————————————————
 def get_ollama_models() -> List[str]:
     try:
         info = ollama.list()
@@ -174,9 +174,9 @@ def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
     except Exception as e:
         return json.dumps({"error": str(e)})
 
-# ——————————————————————————
-# GRADIO APP
-# ——————————————————————————
+——————————————————————————
+GRADIO APP
+——————————————————————————
 def create_enhanced_rss_viewer():
     def get_pub_date(a: Article):
         try:
@@ -191,7 +191,7 @@ def create_enhanced_rss_viewer():
         for fd in feeds_data.values():
             if fd.status == "success":
                 GLOBAL_ARTICLE_CACHE.extend(fd.articles)
-        # (build your HTML here exactly as before…)
+        # Build HTML here…
 
     def chat_with_feeds(history: List[List[str]], query: str) -> Tuple[List[List[str]], str]:
         if not query.strip():
@@ -225,11 +225,11 @@ def create_enhanced_rss_viewer():
         gr.Markdown("# 📰 Datanacci RSS App")
 
         with gr.Tabs():
-            # … your category tabs …
+            # (your category tabs go here…)
 
             # Chat Tab
             with gr.TabItem("💬 Chat with RSS"):
-                gr.Markdown("**Model fixed to datanacci-rss-model; JSON output.**")
+                gr.Markdown("Model fixed to datanacci-rss-model; JSON output.")
                 chatbot = gr.Chatbot(type="messages")
                 ask = gr.Textbox(placeholder="Ask about feeds...")
                 clr = gr.Button("Clear")
@@ -240,25 +240,27 @@ def create_enhanced_rss_viewer():
             with gr.TabItem("⚙️ Settings"):
                 tot_cat = len(RSS_FEEDS)
                 tot_feed = sum(len(v) for v in RSS_FEEDS.values())
-                gr.Markdown(f"**Categories:** {tot_cat} • **Feeds:** {tot_feed}")
+                gr.Markdown(f"Categories: {tot_cat} • Feeds: {tot_feed}")
                 items = []
-                for e in RSS_CONFIG:
-                    ok = "✅" if requests.get(e["url"], timeout=3).ok else "❌"
-                    items.append(f"{ok} {e['feed_name']}")
+                for entry in RSS_CONFIG:
+                    url  = entry.get("url", "")
+                    name = entry.get("feed_name", "")
+                    ok   = "✅" if url and requests.get(url, timeout=3).ok else "❌"
+                    items.append(f"{ok} {name}")
                 gr.Markdown("<br>".join(items))
                 gr.HTML(check_ollama_status())
                 mods = get_ollama_models()
                 okm = "✅" if "datanacci-rss-model" in mods else "❌"
-                gr.Markdown(f"**datanacci-rss-model** {okm}")
+                gr.Markdown(f"datanacci-rss-model {okm}")
 
             # Configurations Tab
             with gr.TabItem("🛠️ Configurations"):
                 df = pd.DataFrame(RSS_CONFIG)
                 table = gr.Dataframe(value=df, interactive=False)
-                cat_in = gr.Textbox(label="Category")
+                cat_in  = gr.Textbox(label="Category")
                 name_in = gr.Textbox(label="Feed Name")
-                url_in = gr.Textbox(label="Feed URL")
-                add = gr.Button("Add Feed")
+                url_in  = gr.Textbox(label="Feed URL")
+                add     = gr.Button("Add Feed")
 
                 def _add(cat, nm, u):
                     ent = {
@@ -271,7 +273,6 @@ def create_enhanced_rss_viewer():
                     RSS_CONFIG.append(ent)
                     save_config(RSS_CONFIG)
                     return pd.DataFrame(RSS_CONFIG)
-
                 add.click(_add, [cat_in, name_in, url_in], table)
 
                 upload = gr.File(file_types=[".json"])
@@ -286,5 +287,5 @@ def create_enhanced_rss_viewer():
 
         return app
 
-if __name__ == "__main__":
+if name == "main":
     create_enhanced_rss_viewer().launch()
