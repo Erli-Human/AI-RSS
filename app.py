@@ -5891,7 +5891,7 @@ def test_detection(self):
         return f"❌ Model test failed: {str(e)}"
 
 
-Instantiate the detector globally (THIS IS THE FIX - ensure it's here before gr.Blocks())
+Instantiate the detector globally (THIS IS THE FIX - ensure its here before gr.Blocks())
 
 enhanced_detector = EnhancedDetector()
 
