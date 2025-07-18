@@ -1,24 +1,41 @@
 # Core Framework
-gradio>=4.0.0
-torch>=2.0.0
-torchvision>=0.15.0
-torchaudio>=2.0.0
+gradio>=4.44.0
+torch>=2.5.0
+torchvision>=0.20.0
+torchaudio>=2.5.0
 
 # Video Processing & AI
-yt-dlp>=2023.10.13
-whisper-openai
-ultralytics>=8.0.0
-opencv-python>=4.8.0
-librosa>=0.10.0
+yt-dlp>=2024.12.13
+openai-whisper>=20231117
+ultralytics>=8.3.0
+opencv-python>=4.10.0
+librosa>=0.10.2
 ffmpeg-python>=0.2.0
 
 # Image Processing
-Pillow>=10.0.0
-numpy>=1.24.0
-matplotlib>=3.7.0
+Pillow>=10.4.0
+numpy>=1.26.0
+matplotlib>=3.9.0
 
 # RSS & Web Processing
-feedparser>=6.0.10
-requests>=2.31.0
-aiohttp>=3.8.0
-beautifulsoup4>=4.12.0
+feedparser>=6.0.11
+requests>=2.32.0
+aiohttp>=3.10.0
+beautifulsoup4>=4.12.3
+
+# Voice & Audio
+gTTS>=2.5.0
+speech-recognition>=3.10.4
+pyaudio>=0.2.14
+
+# Data Processing
+pandas>=2.2.0
+sqlite3
+json5>=0.9.25
+
+# Utilities
+schedule>=1.2.2
+threading-timer>=0.1.1
+smtplib-ssl>=1.0.0
+dataclasses-json>=0.6.7
+asyncio>=3.4.3
