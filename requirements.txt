@@ -1,12 +1,17 @@
-feedparser
-# Gradio web UI framework for the app
+# UI Framework
 gradio
-# HTTP requests for fetching RSS feeds
-requests
-# Scheduling library for periodic tasks
-schedule
-# Data handling and analysis
-pandas
-# Plotting (if needed for visualization)
-matplotlib
 
+# For parsing RSS feeds
+feedparser
+
+# For data manipulation and display
+pandas
+
+# For making HTTP requests (downloading models and feeds)
+requests
+
+# For numerical operations, required by ONNX
+numpy
+
+# For running the local ONNX models
+onnxruntime
