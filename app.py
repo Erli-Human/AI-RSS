@@ -6026,7 +6026,7 @@ print(" 5. Improved error handling")
 
 --- Main Interface ---
 
-with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="StreamSnap") as demo:
+with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="Datanacci-Streamer") as demo:
 
 # Global state
 
@@ -6038,7 +6038,7 @@ current_vision_analysis = {}
 
 # Initialize GPU acceleration detection
 
-print("🚀 Initializing StreamSnap with GPU acceleration...")
+print("🚀 Initializing Datanacci with GPU acceleration...")
 
 gpu_type, gpu_config = detect_gpu_acceleration()
 
@@ -6054,7 +6054,7 @@ else:
 
 gpu_status = f" • {gpu_config['name']}" if gpu_config else ""
 
-gr.HTML(f'<div class="main-title">📺 StreamSnap</div><div class="subtitle">Download • Transcribe • Real-Time Object Detection{gpu_status}</div>')
+gr.HTML(f'<div class="main-title">📺 Datanacci Media Agent</div><div class="subtitle">Download • Transcribe • Real-Time Object Detection{gpu_status}</div>')
 
 with gr.Tabs():
 
@@ -6398,7 +6398,7 @@ with gr.Tabs():
 
 # --- Event Handlers ---
 
-# StreamSnap events
+# Datanacci events
 
 preview_button.click(
 
