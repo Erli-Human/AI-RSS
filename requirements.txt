@@ -5,8 +5,7 @@ torchvision>=0.20.0
 torchaudio>=2.5.0
 
 # Video Processing & AI
-yt-dlp>=2024.12.13
-openai-whisper>=20231117
+yt-dlp
 ultralytics>=8.3.0
 opencv-python>=4.10.0
 librosa>=0.10.2
