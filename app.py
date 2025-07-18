@@ -42,10 +42,9 @@ RSS_FEEDS = {
     }
 }
 
-
-# --- ONNX Model URLs and Paths ---
-SMOLLM_MODEL_URL = "https://huggingface.co/HuggingFaceTB/SmolLM-1.7B-Instruct-onnx/resolve/main/model.onnx?download=true"
-SMOLLM_MODEL_PATH = "smollm_model.onnx"
+# --- ONNX Model: Switched to a public GPT-2 model that doesn't require login ---
+GPT2_MODEL_URL = "https://huggingface.co/onnx-community/gpt2-medium-onnx/resolve/main/gpt2-medium-10.onnx?download=true"
+GPT2_MODEL_PATH = "gpt2_medium.onnx"
 
 # --- Model Download and Initialization ---
 
@@ -60,7 +59,7 @@ def download_file(url: str, dest_path: str):
         with open(dest_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
-        print(f"Downloaded {dest_path}")
+        print(f"Successfully downloaded {dest_path}")
     except Exception as e:
         print(f"Error downloading {url}: {e}")
         if os.path.exists(dest_path):
@@ -73,52 +72,53 @@ def initialize_onnx_session(model_path: str) -> ort.InferenceSession:
         print(f"Failed to initialize ONNX session for {model_path}: {e}")
         return None
 
-download_file(SMOLLM_MODEL_URL, SMOLLM_MODEL_PATH)
-smollm_session = initialize_onnx_session(SMOLLM_MODEL_PATH)
+download_file(GPT2_MODEL_URL, GPT2_MODEL_PATH)
+gpt2_session = initialize_onnx_session(GPT2_MODEL_PATH)
 
-
-# --- Data Models ---
+# --- Data Models & JSON Persistence ---
 @dataclass
 class Article:
     title: str; link: str; published: str; summary: str; feed_name: str
     author: str = ""; fetched_at: str = datetime.utcnow().isoformat()
 
-# --- JSON Persistence ---
-
 def load_json(path: str, default: list = []) -> list:
     if not os.path.exists(path) or os.path.getsize(path) == 0: return default
-    with open(path, "r", encoding="utf-8") as f: return json.load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            # Ensure data is a list
+            return data if isinstance(data, list) else default
+    except json.JSONDecodeError:
+        print(f"Warning: Could not decode JSON from {path}. Returning default.")
+        return default
 
 def save_json(path: str, data: list) -> None:
-    with open(path, "w", encoding="utf-8") as f: json.dump(data, f, indent=2)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
 def initialize_config() -> List[Dict[str, Any]]:
-    if os.path.exists(CONFIG_PATH):
-        existing_config = load_json(CONFIG_PATH)
-        existing_urls = {feed['url'] for feed in existing_config}
-        
-        for cat, feeds in RSS_FEEDS.items():
-            for name, url in feeds.items():
-                if url not in existing_urls:
-                    existing_config.append({
-                        "category": cat, "feed_name": name, "url": url,
-                        "created": datetime.utcnow().isoformat(), "key": f"{cat}_{name}"
-                    })
-        save_json(CONFIG_PATH, existing_config)
-        return existing_config
+    config = load_json(CONFIG_PATH)
+    # FIX: Check if entry is a dict before accessing keys to prevent crashes
+    existing_urls = {feed['url'] for feed in config if isinstance(feed, dict)}
     
-    cfg = []
+    new_feeds_added = False
     for cat, feeds in RSS_FEEDS.items():
         for name, url in feeds.items():
-            cfg.append({
-                "category": cat, "feed_name": name, "url": url,
-                "created": datetime.utcnow().isoformat(), "key": f"{cat}_{name}"
-            })
-    save_json(CONFIG_PATH, cfg)
-    return cfg
+            if url not in existing_urls:
+                config.append({
+                    "category": cat, "feed_name": name, "url": url,
+                    "created": datetime.utcnow().isoformat(), "key": f"{cat}_{name}"
+                })
+                new_feeds_added = True
+
+    # Ensure config only contains dictionaries before saving
+    clean_config = [feed for feed in config if isinstance(feed, dict)]
+    if new_feeds_added or len(clean_config) != len(config):
+        save_json(CONFIG_PATH, clean_config)
+        
+    return clean_config
 
 # --- Core RSS Logic ---
-
 def fetch_single_feed(url: str, feed_name: str, timeout: int = 10) -> List[Article]:
     try:
         r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=timeout)
@@ -135,11 +135,11 @@ def fetch_single_feed(url: str, feed_name: str, timeout: int = 10) -> List[Artic
 def update_article_history() -> str:
     config = load_json(CONFIG_PATH)
     history = load_json(HISTORY_PATH)
-    existing_links = {a['link'] for a in history}
+    existing_links = {a['link'] for a in history if isinstance(a, dict)}
     new_articles_found = 0
     
     with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_feed = {executor.submit(fetch_single_feed, f['url'], f['feed_name']): f for f in config}
+        future_to_feed = {executor.submit(fetch_single_feed, f['url'], f['feed_name']): f for f in config if isinstance(f, dict)}
         for future in as_completed(future_to_feed):
             for article in future.result():
                 if article.link not in existing_links:
@@ -155,16 +155,16 @@ def update_article_history() -> str:
 
 # --- ONNX Text Generation ---
 def generate_text_from_onnx(prompt: str) -> str:
-    if not smollm_session: return "SmolLM ONNX model not initialized."
+    if not gpt2_session: return "GPT-2 ONNX model not initialized."
     if not prompt: return "No prompt."
     
-    # Placeholder: Replace with a real tokenizer
-    input_ids = np.array([ord(c) for c in prompt], dtype=np.int64).reshape(1, -1)
+    # Placeholder for a real tokenizer
+    input_ids = np.array([ord(c) for c in prompt if ord(c) < 50257], dtype=np.int64).reshape(1, -1) # Using GPT-2 vocab size
     
     try:
-        input_name = smollm_session.get_inputs()[0].name
-        output = smollm_session.run(None, {input_name: input_ids})
-        # Placeholder: Replace with real decoding
+        input_name = gpt2_session.get_inputs()[0].name
+        output = gpt2_session.run(None, {input_name: input_ids})
+        # Placeholder for real decoding
         return ''.join(chr(id) for id in output[0][0] if id < 256)
     except Exception as e: return f"Error during ONNX inference: {e}"
 
@@ -173,10 +173,7 @@ def create_app():
     def chat_with_history(history: List[Dict[str, str]], query: str) -> Tuple[List[Dict[str, str]], None]:
         if not query.strip(): return history, None
         context = load_json(HISTORY_PATH)
-        system_prompt = (
-            "You are a research assistant. Use the following articles to answer."
-            f"\n\n--- CONTEXT ---\n{json.dumps(context, indent=2)}"
-        )
+        system_prompt = f"CONTEXT: {json.dumps(context, indent=2)}"
         full_prompt = system_prompt + "\n\n"
         for h in history: full_prompt += f"{h['role']}: {h['content']}\n"
         full_prompt += f"user: {query}\nassistant:"
@@ -193,7 +190,7 @@ def create_app():
             with gr.TabItem("📖 Article History"):
                 fetch_button = gr.Button("Fetch All RSS Feeds", variant="primary")
                 fetch_status = gr.Markdown("Click to update article history.")
-                history_df = gr.Dataframe(value=pd.DataFrame(load_json(HISTORY_PATH)), interactive=False, height=600)
+                history_df = gr.Dataframe(value=pd.DataFrame(load_json(HISTORY_PATH)), interactive=False, height=600, wrap=True)
                 
                 def refresh_ui():
                     status = update_article_history()
@@ -202,7 +199,7 @@ def create_app():
                 fetch_button.click(fn=refresh_ui, outputs=[fetch_status, history_df])
 
             with gr.TabItem("💬 Chat with History (RAG)"):
-                gr.Markdown("## Chat with your article history (using local SmolLM ONNX)")
+                gr.Markdown("## Chat using Local GPT-2 ONNX Model")
                 gr.Markdown("⚠️ **Warning**: Model tokenization is a placeholder. A proper tokenizer is required for valid results.")
                 chatbot = gr.Chatbot(type="messages", value=[], height=600)
                 ask_textbox = gr.Textbox(placeholder="Enter your question...", label="Your Question")
@@ -212,8 +209,11 @@ def create_app():
             
             with gr.TabItem("🛠️ Configurations"):
                 gr.Markdown("## RSS Feed Configuration (`rss_config.json`)")
-                config_df = gr.Dataframe(value=pd.DataFrame(initialize_config()), interactive=True)
-                config_df.change(lambda d: save_json(CONFIG_PATH, d.to_dict('records')), config_df, None)
+                config_df = gr.Dataframe(value=pd.DataFrame(initialize_config()), interactive=True, wrap=True)
+                def save_config_df(data: pd.DataFrame):
+                    save_json(CONFIG_PATH, data.to_dict('records'))
+                    gr.Info("Configuration saved!")
+                config_df.change(save_config_df, config_df, None)
 
     return app
 
