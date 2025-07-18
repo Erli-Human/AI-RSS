@@ -2,195 +2,222 @@ import os
 import json
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import gradio as gr
 import feedparser
 import pandas as pd
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import numpy as np
+import onnxruntime as ort
 
-RSS Feed Sources
+# --- Constants ---
+CONFIG_PATH = "rss_config.json"
+HISTORY_PATH = "article_history.json"
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
-        "OpenAI Blog": "https://openai.com/blog/rss.xml"
+        "OpenAI Blog": "https://openai.com/blog/rss.xml",
+        "Hugging Face Blog": "https://huggingface.co/blog/feed.xml"
+    },
+    "🚨 Breaking News": {
+        "Reuters Top News": "http://feeds.reuters.com/reuters/topNews",
+        "Associated Press": "https://apnews.com/hub/ap-top-news/rss"
+    },
+    "🌍 World News": {
+        "Reuters World News": "http://feeds.reuters.com/Reuters/worldNews",
+        "BBC World News": "http://feeds.bbci.co.uk/news/world/rss.xml",
+        "Global News": "https://globalnews.ca/feed/"
+    },
+    "💻 Technology": {
+        "TechCrunch": "https://techcrunch.com/feed/",
+        "Wired": "https://www.wired.com/feed/rss"
+    },
+    "⚽ Sports": {
+        "ESPN": "https://www.espn.com/espn/rss/news",
+        "Olympic News": "https://olympics.com/en/rss/"
+    },
+    "💼 Business": {
+        "Financial Times": "https://www.ft.com/rss/home",
+        "Bloomberg Markets": "https://feeds.bloomberg.com/markets/news.rss"
     }
 }
 
-Config persistence
-CONFIG_PATH = "rss_config.json"
 
-def load_config() -> List[Dict[str, Any]]:
-    if not os.path.exists(CONFIG_PATH) or os.path.getsize(CONFIG_PATH) == 0:
-        seed_date = datetime.utcnow() - timedelta(days=90)
-        cfg = []
-        for cat, feeds in RSS_FEEDS.items():
-            for name, url in feeds.items():
-                cfg.append({
-                    "category": cat,
-                    "feed_name": name,
-                    "url": url,
-                    "created": seed_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "key": f"{cat}_{name}"
-                })
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2)
-        return cfg
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
-def save_config(cfg: List[Dict[str, Any]]) -> None:
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
-RSS_CONFIG = load_config()
+# --- ONNX Model URLs and Paths ---
+SMOLLM_MODEL_URL = "https://huggingface.co/HuggingFaceTB/SmolLM-1.7B-Instruct-onnx/resolve/main/model.onnx?download=true"
+SMOLLM_MODEL_PATH = "smollm_model.onnx"
 
+# --- Model Download and Initialization ---
+
+def download_file(url: str, dest_path: str):
+    if os.path.exists(dest_path):
+        print(f"{dest_path} already exists.")
+        return
+    print(f"{dest_path} not found. Downloading...")
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with open(dest_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print(f"Downloaded {dest_path}")
+    except Exception as e:
+        print(f"Error downloading {url}: {e}")
+        if os.path.exists(dest_path):
+            os.remove(dest_path)
+
+def initialize_onnx_session(model_path: str) -> ort.InferenceSession:
+    try:
+        return ort.InferenceSession(model_path)
+    except Exception as e:
+        print(f"Failed to initialize ONNX session for {model_path}: {e}")
+        return None
+
+download_file(SMOLLM_MODEL_URL, SMOLLM_MODEL_PATH)
+smollm_session = initialize_onnx_session(SMOLLM_MODEL_PATH)
+
+
+# --- Data Models ---
 @dataclass
 class Article:
-    title: str
-    link: str
-    published: str
-    summary: str
-    author: str = ""
-    feed_name: str = ""
+    title: str; link: str; published: str; summary: str; feed_name: str
+    author: str = ""; fetched_at: str = datetime.utcnow().isoformat()
 
-@dataclass
-class FeedData:
-    status: str
-    articles: List[Article]
-    last_updated: str
-    error: str = ""
+# --- JSON Persistence ---
 
-GLOBAL_ARTICLE_CACHE: List[Article] = []
+def load_json(path: str, default: list = []) -> list:
+    if not os.path.exists(path) or os.path.getsize(path) == 0: return default
+    with open(path, "r", encoding="utf-8") as f: return json.load(f)
 
-def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
+def save_json(path: str, data: list) -> None:
+    with open(path, "w", encoding="utf-8") as f: json.dump(data, f, indent=2)
+
+def initialize_config() -> List[Dict[str, Any]]:
+    if os.path.exists(CONFIG_PATH):
+        existing_config = load_json(CONFIG_PATH)
+        existing_urls = {feed['url'] for feed in existing_config}
+        
+        for cat, feeds in RSS_FEEDS.items():
+            for name, url in feeds.items():
+                if url not in existing_urls:
+                    existing_config.append({
+                        "category": cat, "feed_name": name, "url": url,
+                        "created": datetime.utcnow().isoformat(), "key": f"{cat}_{name}"
+                    })
+        save_json(CONFIG_PATH, existing_config)
+        return existing_config
+    
+    cfg = []
+    for cat, feeds in RSS_FEEDS.items():
+        for name, url in feeds.items():
+            cfg.append({
+                "category": cat, "feed_name": name, "url": url,
+                "created": datetime.utcnow().isoformat(), "key": f"{cat}_{name}"
+            })
+    save_json(CONFIG_PATH, cfg)
+    return cfg
+
+# --- Core RSS Logic ---
+
+def fetch_single_feed(url: str, feed_name: str, timeout: int = 10) -> List[Article]:
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(url, headers=headers, timeout=timeout)
+        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=timeout)
         r.raise_for_status()
         feed = feedparser.parse(r.content)
-        if feed.bozo and feed.bozo_exception:
-            return FeedData("error", [], datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            error=str(feed.bozo_exception))
-        arts = []
-        for e in feed.entries:
-            arts.append(Article(
-                title=e.get("title","No title"),
-                link=e.get("link",""),
-                published=e.get("published","Unknown"),
-                summary=e.get("summary","No summary")[:200] + "...",
-                author=e.get("author",""),
-                feed_name=feed_name
-            ))
-        return FeedData("success", arts, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        if feed.bozo: print(f"Warning: Feed {feed_name} malformed. {feed.bozo_exception}")
+        return [Article(title=e.get("title","No Title"), link=e.get("link",""),
+                        published=e.get("published","Unknown"), summary=e.get("summary","")[:300]+"...",
+                        author=e.get("author",""), feed_name=feed_name) for e in feed.entries]
     except Exception as ex:
-        return FeedData("error", [], datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        error=str(ex))
+        print(f"Error fetching {feed_name}: {ex}")
+        return []
 
-def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[str, FeedData]:
-    if category not in RSS_FEEDS:
-        return {}
-    results: Dict[str, FeedData] = {}
-    with ThreadPoolExecutor(max_workers=max_workers) as exe:
-        fut2name = {
-            exe.submit(fetch_rss_feed, url, name): name
-            for name, url in RSS_FEEDS[category].items()
-        }
-        for fut in as_completed(fut2name):
-            nm = fut2name[fut]
-            try:
-                results[nm] = fut.result()
-            except Exception as ex:
-                results[nm] = FeedData("error", [], datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                       error=str(ex))
-    return results
+def update_article_history() -> str:
+    config = load_json(CONFIG_PATH)
+    history = load_json(HISTORY_PATH)
+    existing_links = {a['link'] for a in history}
+    new_articles_found = 0
+    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_feed = {executor.submit(fetch_single_feed, f['url'], f['feed_name']): f for f in config}
+        for future in as_completed(future_to_feed):
+            for article in future.result():
+                if article.link not in existing_links:
+                    history.append(asdict(article))
+                    existing_links.add(article.link)
+                    new_articles_found += 1
+    
+    if new_articles_found > 0:
+        history.sort(key=lambda x: x.get('published', ''), reverse=True)
+        save_json(HISTORY_PATH, history)
+        return f"✅ Found {new_articles_found} new articles. Total: {len(history)}."
+    return f"ℹ️ No new articles found. Total: {len(history)}."
 
-Dummy local ONNX-based/model runner or mock function
-def generate_local_response(messages: List[Dict[str, str]]) -> str:
-    prompt = messages[-1]["content"]
-    return f"[llama3-onnx-dummy]: Echo: {prompt}"
+# --- ONNX Text Generation ---
+def generate_text_from_onnx(prompt: str) -> str:
+    if not smollm_session: return "SmolLM ONNX model not initialized."
+    if not prompt: return "No prompt."
+    
+    # Placeholder: Replace with a real tokenizer
+    input_ids = np.array([ord(c) for c in prompt], dtype=np.int64).reshape(1, -1)
+    
+    try:
+        input_name = smollm_session.get_inputs()[0].name
+        output = smollm_session.run(None, {input_name: input_ids})
+        # Placeholder: Replace with real decoding
+        return ''.join(chr(id) for id in output[0][0] if id < 256)
+    except Exception as e: return f"Error during ONNX inference: {e}"
 
-def create_enhanced_rss_viewer():
-    def format_category_feeds_html(cat: str, n: int = 3) -> str:
-        fd = fetch_category_feeds_parallel(cat)
-        GLOBAL_ARTICLE_CACHE.clear()
-        for v in fd.values():
-            if v.status == "success":
-                GLOBAL_ARTICLE_CACHE.extend(v.articles)
-        return f"<p>Loaded {len(fd)} feeds.</p>"
-
-    def chat_with_feeds(history: List[Dict[str, str]], query: str) -> Tuple[List[Dict[str, str]], None]:
-        if not query.strip():
-            return history, None
-        ctx = {e["key"]: e for e in RSS_CONFIG if isinstance(e, dict)}
-        system = {
-            "role":"system",
-            "content":("You are llama3-onnx-dummy. "
-                       "Use RSS_CONFIG metadata for context. "
-                       f"CONFIG: {ctx}")
-        }
-        msgs = [system]
-        for h in history:
-            msgs.append({"role": h["role"], "content": h["content"]})
-        msgs.append({"role": "user", "content": query})
-        resp = generate_local_response(msgs)
+# --- Gradio UI ---
+def create_app():
+    def chat_with_history(history: List[Dict[str, str]], query: str) -> Tuple[List[Dict[str, str]], None]:
+        if not query.strip(): return history, None
+        context = load_json(HISTORY_PATH)
+        system_prompt = (
+            "You are a research assistant. Use the following articles to answer."
+            f"\n\n--- CONTEXT ---\n{json.dumps(context, indent=2)}"
+        )
+        full_prompt = system_prompt + "\n\n"
+        for h in history: full_prompt += f"{h['role']}: {h['content']}\n"
+        full_prompt += f"user: {query}\nassistant:"
+        
+        resp = generate_text_from_onnx(full_prompt)
         history.append({"role": "user", "content": query})
         history.append({"role": "assistant", "content": resp})
         return history, None
 
-    with gr.Blocks(title="Datanacci RSS") as app:
-        gr.Markdown("# 📰 Datanacci RSS App")
-        with gr.Tabs():
-            for cat in RSS_FEEDS:
-                with gr.TabItem(cat):
-                    gr.Markdown(f"### {cat}")
-                    html = gr.HTML(format_category_feeds_html(cat))
-                    btn = gr.Button("Refresh")
-                    btn.click(fn=format_category_feeds_html, inputs=[gr.State(cat)], outputs=[html])
-            with gr.TabItem("💬 Chat with RSS"):
-                gr.Markdown("Model fixed to browser ONNX/dummy; JSON output.")
-                chatbot = gr.Chatbot(type="messages", value=[])
-                ask = gr.Textbox(placeholder="Ask about feeds...")
-                clr = gr.Button("Clear")
-                ask.submit(chat_with_feeds, [chatbot, ask], [chatbot, ask])
-                clr.click(lambda: [], None, chatbot)
-            with gr.TabItem("⚙️ Settings"):
-                tot_cat = len(RSS_FEEDS)
-                tot_feed = sum(len(v) for v in RSS_FEEDS.values())
-                gr.Markdown(f"Categories: {tot_cat} • Feeds: {tot_feed}")
-                items = []
-                for entry in RSS_CONFIG:
-                    if isinstance(entry, dict):
-                        url  = entry.get("url","")
-                        name = entry.get("feed_name","")
-                        ok   = "✅" if url and requests.get(url,timeout=3).ok else "❌"
-                        items.append(f"{ok} {name}")
-                gr.Markdown("<br>".join(items))
-            with gr.TabItem("🛠️ Configurations"):
-                df = pd.DataFrame(RSS_CONFIG if isinstance(RSS_CONFIG, list) else [])
-                table = gr.Dataframe(value=df, interactive=False)
-                cat_in  = gr.Textbox(label="Category")
-                name_in = gr.Textbox(label="Feed Name")
-                url_in  = gr.Textbox(label="Feed URL")
-                add_btn = gr.Button("Add Feed")
-                def _add(cat, nm, u):
-                    ent = {
-                        "category": cat,
-                        "feed_name": nm,
-                        "url": u,
-                        "created": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "key": f"{cat}_{nm}"
-                    }
-                    RSS_CONFIG.append(ent)
-                    save_config(RSS_CONFIG)
-                    return pd.DataFrame(RSS_CONFIG)
-                add_btn.click(_add, [cat_in, name_in, url_in], table)
-                upload = gr.File(file_types=[".json"])
-                def _upload(f):
-                    cfg = json.load(open(f.name, encoding="utf-8"))
-                    save_config(cfg)
-                    return pd.DataFrame(cfg)
-                upload.upload(_upload, upload, table)
-                down = gr.Button("Download Config")
-                down.click(lambda: CONFIG_PATH, None, None)
-        return app
+    with gr.Blocks(title="Datanacci RSS", theme=gr.themes.Soft()) as app:
+        gr.Markdown("# 📰 Datanacci RSS App with Local ONNX")
 
-if name == "main":
-    create_enhanced_rss_viewer().launch()
+        with gr.Tabs():
+            with gr.TabItem("📖 Article History"):
+                fetch_button = gr.Button("Fetch All RSS Feeds", variant="primary")
+                fetch_status = gr.Markdown("Click to update article history.")
+                history_df = gr.Dataframe(value=pd.DataFrame(load_json(HISTORY_PATH)), interactive=False, height=600)
+                
+                def refresh_ui():
+                    status = update_article_history()
+                    df = pd.DataFrame(load_json(HISTORY_PATH))
+                    return status, df
+                fetch_button.click(fn=refresh_ui, outputs=[fetch_status, history_df])
+
+            with gr.TabItem("💬 Chat with History (RAG)"):
+                gr.Markdown("## Chat with your article history (using local SmolLM ONNX)")
+                gr.Markdown("⚠️ **Warning**: Model tokenization is a placeholder. A proper tokenizer is required for valid results.")
+                chatbot = gr.Chatbot(type="messages", value=[], height=600)
+                ask_textbox = gr.Textbox(placeholder="Enter your question...", label="Your Question")
+                clear_button = gr.Button("Clear Chat")
+                ask_textbox.submit(chat_with_history, [chatbot, ask_textbox], [chatbot, ask_textbox])
+                clear_button.click(lambda: [], None, chatbot)
+            
+            with gr.TabItem("🛠️ Configurations"):
+                gr.Markdown("## RSS Feed Configuration (`rss_config.json`)")
+                config_df = gr.Dataframe(value=pd.DataFrame(initialize_config()), interactive=True)
+                config_df.change(lambda d: save_json(CONFIG_PATH, d.to_dict('records')), config_df, None)
+
+    return app
+
+if __name__ == "__main__":
+    initialize_config()
+    app = create_app()
+    app.launch()
