@@ -47,7 +47,7 @@ torch-audio>=2.0.0 # Audio processing for PyTorch
 
 transformers>=4.30.0 # Optional: For advanced AI models
 
-Development & Utilities (optional but recommended)
+#Development & Utilities (optional but recommended)
 
 scipy>=1.10.0 # Scientific computing
 
