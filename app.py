@@ -226,7 +226,7 @@ def generate_text(prompt):
         if smollm_session is None:
             return "SmolLM model not available."
         
-        news_response = rss_agent.chat_response(prompt):
+        news_response = rss_agent.chat_response(prompt)
   if news_response:
             return news_response
         
