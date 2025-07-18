@@ -348,9 +348,6 @@ with gr.Blocks(
                 clear_btn = gr.Button("Clear Chat", scale=1)
                 refresh_btn = gr.Button("🔄 Refresh News", variant="secondary", scale=1)
         
-        with gr.Column(scale=1
-```
-```python
         with gr.Column(scale=1):
             # Audio input section
             gr.Markdown("### 🎤 Voice Input")
