@@ -4,15 +4,17 @@ import onnxruntime as ort
 import os
 import requests
 
-# Define URLs for the models (replace these URLs with actual URLs for your models)
-whisper_encoder_model_url = "https://huggingface.co/Lasisi/whisper-small-ONNX/blob/main/onnx/encoder_model.onnx"
-whisper_decoder_model_url = "https://huggingface.co/Lasisi/whisper-small-ONNX/blob/main/onnx/decoder_model.onnx"
-smollm_model_url = "https://huggingface.co/HuggingFaceTB/SmolLM3-3B-ONNX/blob/main/onnx/model.onnx"
+# Define URLs for the models
+whisper_encoder_model_url = "http://example.com/path/to/encoder.onnx"
+whisper_decoder_model_url = "http://example.com/path/to/decoder.onnx"
+smollm_model_url = "http://example.com/path/to/smollm.onnx"
+kokoro_model_url = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model.onnx"
 
-# Define paths for the models
-whisper_encoder_model_path = "encoder_model.onnx"
-whisper_decoder_model_path = "decoder_model.onnx"
-smollm_model_path = "model.onnx"
+# Define local paths for the models
+whisper_encoder_model_path = "encoder.onnx"
+whisper_decoder_model_path = "decoder.onnx"
+smollm_model_path = "smollm.onnx"
+kokoro_model_path = "kokoro_model.onnx"
 
 # Function to download a file
 def download_file(url, dest_path):
@@ -20,26 +22,23 @@ def download_file(url, dest_path):
     if response.status_code == 200:
         with open(dest_path, 'wb') as f:
             f.write(response.content)
+    else:
+        raise Exception(f"Failed to download {url}: Status Code {response.status_code}")
 
 # Function to check and download models
 def download_models():
     if not os.path.exists(whisper_encoder_model_path):
         print(f"{whisper_encoder_model_path} does not exist. Downloading...")
         download_file(whisper_encoder_model_url, whisper_encoder_model_path)
-    else:
-        print(f"{whisper_encoder_model_path} already exists.")
-
     if not os.path.exists(whisper_decoder_model_path):
         print(f"{whisper_decoder_model_path} does not exist. Downloading...")
         download_file(whisper_decoder_model_url, whisper_decoder_model_path)
-    else:
-        print(f"{whisper_decoder_model_path} already exists.")
-        
     if not os.path.exists(smollm_model_path):
         print(f"{smollm_model_path} does not exist. Downloading...")
         download_file(smollm_model_url, smollm_model_path)
-    else:
-        print(f"{smollm_model_path} already exists.")
+    if not os.path.exists(kokoro_model_path):
+        print(f"{kokoro_model_path} does not exist. Downloading...")
+        download_file(kokoro_model_url, kokoro_model_path)
 
 # Download models upon starting the app
 download_models()
@@ -48,55 +47,70 @@ download_models()
 encoder_session = ort.InferenceSession(whisper_encoder_model_path)
 decoder_session = ort.InferenceSession(whisper_decoder_model_path)
 smollm_session = ort.InferenceSession(smollm_model_path)
+kokoro_session = ort.InferenceSession(kokoro_model_path)
 
-# Function to run Whisper model for Speech to Text
+# Function for Whisper model to transcribe audio
 def whisper_transcribe(audio):
+    if audio is None:
+        return "No audio input provided."
+
     audio_data = np.frombuffer(audio, dtype=np.float32).flatten()
     
-    # Processing through the encoder
+    # Process through the encoder
     encoder_input_name = encoder_session.get_inputs()[0].name
     encoder_output = encoder_session.run(None, {encoder_input_name: audio_data})
     
-    # Now run the output through the decoder
+    # Process through the decoder
     decoder_input_name = decoder_session.get_inputs()[0].name
     decoder_output = decoder_session.run(None, {decoder_input_name: encoder_output[0]})
     
-    transcription = decoder_output[0]
+    transcription = decoder_output[0]  # Adjust based on the actual model output format
     return transcription
 
-# Function to run Smollm model for Text Generation
+# Function for Smollm model for text generation
 def generate_text(prompt):
-    input_ids = np.array([ord(c) for c in prompt]).reshape(1, -1)  # Simple encoding; adjust this
+    if not prompt:
+        return "No prompt provided."
+
+    input_ids = np.array([ord(c) for c in prompt]).reshape(1, -1)  # Adjust based on encoding
     input_name = smollm_session.get_inputs()[0].name
     output = smollm_session.run(None, {input_name: input_ids})
-    generated_text = ''.join(chr(id) for id in output[0][0])  # This should match your decoding method
+    generated_text = ''.join(chr(id) for id in output[0][0])  # Adjust accordingly
     return generated_text
+
+# Function for Kokoro model (if needed)
+def run_kokoro(input_text):
+    if not input_text:
+        return "No input text provided."
+
+    input_ids = np.array([ord(c) for c in input_text]).reshape(1, -1)  # Adjust based on encoding
+    input_name = kokoro_session.get_inputs()[0].name
+    output = kokoro_session.run(None, {input_name: input_ids})
+    output_text = ''.join(chr(id) for id in output[0][0])  # Adjust based on Kokoro's output
+    return output_text
 
 # Create a Gradio interface
 def chat_interface(audio, text_input):
-    if audio:
-        transcription = whisper_transcribe(audio)
-    else:
-        transcription = ""
+    transcription = whisper_transcribe(audio)
+    generated_text = generate_text(text_input)
+    kokoro_response = run_kokoro(text_input)
 
-    if text_input:
-        generated_text = generate_text(text_input)
-    else:
-        generated_text = ""
+    return transcription, generated_text, kokoro_response
 
-    return transcription, generated_text
-
+# Gradio app layout
 with gr.Blocks() as app:
     gr.Markdown("# DataNacci Chat App")
+
     with gr.Row():
         audio_input = gr.Audio(source="microphone", type="numpy", label="Speak:")
         text_input = gr.Textbox(label="Type your message:")
     
     output_transcription = gr.Textbox(label="Transcription:", interactive=False)
-    output_response = gr.Textbox(label="Response:", interactive=False)
+    output_response = gr.Textbox(label="Response from Smollm:", interactive=False)
+    output_kokoro = gr.Textbox(label="Response from Kokoro:", interactive=False)
 
     submit_button = gr.Button("Submit")
-    submit_button.click(chat_interface, inputs=[audio_input, text_input], outputs=[output_transcription, output_response])
+    submit_button.click(chat_interface, inputs=[audio_input, text_input], outputs=[output_transcription, output_response, output_kokoro])
 
 # Launch the app
 if __name__ == "__main__":
