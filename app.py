@@ -8,17 +8,15 @@ import feedparser
 import pandas as pd
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import ollama
 
-# RSS Feed Sources
+RSS Feed Sources
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
         "OpenAI Blog": "https://openai.com/blog/rss.xml"
-        # Add more feeds here...
     }
 }
 
-# Config persistence
+Config persistence
 CONFIG_PATH = "rss_config.json"
 
 def load_config() -> List[Dict[str, Any]]:
@@ -104,19 +102,10 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
                                        error=str(ex))
     return results
 
-def get_ollama_models() -> List[str]:
-    try:
-        info = ollama.list()
-        return [m["name"] for m in info.get("models",[])]
-    except:
-        return []
-
-def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
-    try:
-        resp = ollama.chat(model=model, messages=messages)
-        return resp["message"]["content"]
-    except Exception as ex:
-        return json.dumps({"error": str(ex)})
+Dummy local ONNX-based/model runner or mock function
+def generate_local_response(messages: List[Dict[str, str]]) -> str:
+    prompt = messages[-1]["content"]
+    return f"[llama3-onnx-dummy]: Echo: {prompt}"
 
 def create_enhanced_rss_viewer():
     def format_category_feeds_html(cat: str, n: int = 3) -> str:
@@ -133,30 +122,18 @@ def create_enhanced_rss_viewer():
         ctx = {e["key"]: e for e in RSS_CONFIG if isinstance(e, dict)}
         system = {
             "role":"system",
-            "content":("You are datanacci-rss-model. "
-                       "Using RSS_CONFIG metadata, reply in JSON with keys: "
-                       "category, feed_name, url, created, key, "
-                       "technical_metadata (load_time, run_date, source_date), "
-                       "and any article previews. "
+            "content":("You are llama3-onnx-dummy. "
+                       "Use RSS_CONFIG metadata for context. "
                        f"CONFIG: {ctx}")
         }
         msgs = [system]
         for h in history:
-            msgs.append({"role":"user","content":h["content"]})
-            if h["role"] == "assistant":
-                msgs.append({"role":"assistant","content":h["content"]})
-        msgs.append({"role":"user","content":query})
-        resp = generate_ollama_response("datanacci-rss-model", msgs)
+            msgs.append({"role": h["role"], "content": h["content"]})
+        msgs.append({"role": "user", "content": query})
+        resp = generate_local_response(msgs)
         history.append({"role": "user", "content": query})
         history.append({"role": "assistant", "content": resp})
         return history, None
-
-    def check_ollama_status() -> str:
-        try:
-            m = ollama.list().get("models",[])
-            return f"<p style='color:green;'>✅ Ollama up, {len(m)} models</p>"
-        except Exception as ex:
-            return f"<p style='color:red;'>❌ Ollama error: {ex}</p>"
 
     with gr.Blocks(title="Datanacci RSS") as app:
         gr.Markdown("# 📰 Datanacci RSS App")
@@ -168,7 +145,7 @@ def create_enhanced_rss_viewer():
                     btn = gr.Button("Refresh")
                     btn.click(fn=format_category_feeds_html, inputs=[gr.State(cat)], outputs=[html])
             with gr.TabItem("💬 Chat with RSS"):
-                gr.Markdown("**Model fixed to datanacci-rss-model; JSON output.**")
+                gr.Markdown("Model fixed to browser ONNX/dummy; JSON output.")
                 chatbot = gr.Chatbot(type="messages", value=[])
                 ask = gr.Textbox(placeholder="Ask about feeds...")
                 clr = gr.Button("Clear")
@@ -177,7 +154,7 @@ def create_enhanced_rss_viewer():
             with gr.TabItem("⚙️ Settings"):
                 tot_cat = len(RSS_FEEDS)
                 tot_feed = sum(len(v) for v in RSS_FEEDS.values())
-                gr.Markdown(f"**Categories:** {tot_cat} • **Feeds:** {tot_feed}")
+                gr.Markdown(f"Categories: {tot_cat} • Feeds: {tot_feed}")
                 items = []
                 for entry in RSS_CONFIG:
                     if isinstance(entry, dict):
@@ -186,10 +163,6 @@ def create_enhanced_rss_viewer():
                         ok   = "✅" if url and requests.get(url,timeout=3).ok else "❌"
                         items.append(f"{ok} {name}")
                 gr.Markdown("<br>".join(items))
-                gr.HTML(check_ollama_status())
-                mods = get_ollama_models()
-                okm = "✅" if "datanacci-rss-model" in mods else "❌"
-                gr.Markdown(f"**datanacci-rss-model** {okm}")
             with gr.TabItem("🛠️ Configurations"):
                 df = pd.DataFrame(RSS_CONFIG if isinstance(RSS_CONFIG, list) else [])
                 table = gr.Dataframe(value=df, interactive=False)
@@ -219,5 +192,5 @@ def create_enhanced_rss_viewer():
                 down.click(lambda: CONFIG_PATH, None, None)
         return app
 
-if __name__ == "__main__":
+if name == "main":
     create_enhanced_rss_viewer().launch()
