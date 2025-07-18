@@ -19,9 +19,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import ollama
 
-——————————————————————————
-RSS Feed Sources
-——————————————————————————
+# ——————————————————————————
+# RSS Feed Sources
+# ——————————————————————————
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
         "Science Daily - AI": "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
@@ -37,15 +37,15 @@ RSS_FEEDS = {
         "MIT Technology Review": "https://www.technologyreview.com/feed/",
         "IEEE Spectrum": "https://spectrum.ieee.org/rss/fulltext"
     },
-    # (add your other categories here)
+    # (Add your other categories here, using the same structure.)
 }
 
-——————————————————————————
-CONFIGURATION PERSISTENCE
-——————————————————————————
+# ——————————————————————————
+# CONFIGURATION PERSISTENCE
+# ——————————————————————————
 CONFIG_PATH = "rss_config.json"
 
-def load_config():
+def load_config() -> List[Dict[str, Any]]:
     if not os.path.exists(CONFIG_PATH) or os.path.getsize(CONFIG_PATH) == 0:
         seed_date = datetime.utcnow() - timedelta(days=90)
         cfg = []
@@ -64,15 +64,15 @@ def load_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_config(cfg):
+def save_config(cfg: List[Dict[str, Any]]) -> None:
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
 
 RSS_CONFIG = load_config()
 
-——————————————————————————
-DATA MODELS
-——————————————————————————
+# ——————————————————————————
+# DATA MODELS
+# ——————————————————————————
 @dataclass
 class Article:
     title: str
@@ -91,79 +91,60 @@ class FeedData:
 
 GLOBAL_ARTICLE_CACHE: List[Article] = []
 
-——————————————————————————
-RSS FETCHERS
-——————————————————————————
+# ——————————————————————————
+# RSS FETCHERS
+# ——————————————————————————
 def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
     """Fetch and parse a single RSS feed."""
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=timeout)
-        response.raise_for_status()
-        feed = feedparser.parse(response.content)
-
+        r = requests.get(url, headers=headers, timeout=timeout)
+        r.raise_for_status()
+        feed = feedparser.parse(r.content)
         if feed.bozo and feed.bozo_exception:
-            return FeedData(
-                status="error",
-                articles=[],
-                last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                error=f"Feed parsing error: {feed.bozo_exception}"
-            )
-
-        articles: List[Article] = []
-        for entry in feed.entries:
-            articles.append(Article(
-                title=entry.get('title', 'No title'),
-                link=entry.get('link', ''),
-                published=entry.get('published', 'Unknown date'),
-                summary=entry.get('summary', 'No summary available')[:200] + "...",
-                author=entry.get('author', 'Unknown author'),
+            return FeedData("error", [], datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            error=f"{feed.bozo_exception}")
+        arts = []
+        for e in feed.entries:
+            arts.append(Article(
+                title=e.get("title","No title"),
+                link=e.get("link",""),
+                published=e.get("published","Unknown"),
+                summary=e.get("summary","No summary")[:200]+"...",
+                author=e.get("author",""),
                 feed_name=feed_name
             ))
-        return FeedData(
-            status="success",
-            articles=articles,
-            last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        )
-    except Exception as e:
-        return FeedData(
-            status="error",
-            articles=[],
-            last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            error=str(e)
-        )
+        return FeedData("success", arts, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    except Exception as ex:
+        return FeedData("error", [], datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        error=str(ex))
 
 def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[str, FeedData]:
     """Fetch all feeds in a category using parallel processing."""
     if category not in RSS_FEEDS:
         return {}
-    feeds = RSS_FEEDS[category]
     results: Dict[str, FeedData] = {}
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_name = {
-            executor.submit(fetch_rss_feed, url, name): name
-            for name, url in feeds.items()
+    with ThreadPoolExecutor(max_workers=max_workers) as exe:
+        fut2name = {
+            exe.submit(fetch_rss_feed, url, name): name
+            for name, url in RSS_FEEDS[category].items()
         }
-        for future in as_completed(future_to_name):
-            name = future_to_name[future]
+        for fut in as_completed(fut2name):
+            nm = fut2name[fut]
             try:
-                results[name] = future.result()
-            except Exception as e:
-                results[name] = FeedData(
-                    status="error",
-                    articles=[],
-                    last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    error=str(e)
-                )
+                results[nm] = fut.result()
+            except Exception as ex:
+                results[nm] = FeedData("error", [], datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                       error=str(ex))
     return results
 
-——————————————————————————
-OLLAMA UTILITIES
-——————————————————————————
+# ——————————————————————————
+# OLLAMA UTILITIES
+# ——————————————————————————
 def get_ollama_models() -> List[str]:
     try:
         info = ollama.list()
-        return [m["name"] for m in info.get("models", [])]
+        return [m["name"] for m in info.get("models",[])]
     except:
         return []
 
@@ -171,12 +152,12 @@ def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
     try:
         resp = ollama.chat(model=model, messages=messages)
         return resp["message"]["content"]
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    except Exception as ex:
+        return json.dumps({"error": str(ex)})
 
-——————————————————————————
-GRADIO APP
-——————————————————————————
+# ——————————————————————————
+# GRADIO APP
+# ——————————————————————————
 def create_enhanced_rss_viewer():
     def get_pub_date(a: Article):
         try:
@@ -186,94 +167,105 @@ def create_enhanced_rss_viewer():
             return datetime.min
 
     def format_category_feeds_html(cat: str, n: int = 3) -> str:
-        feeds_data = fetch_category_feeds_parallel(cat)
+        fd = fetch_category_feeds_parallel(cat)
         GLOBAL_ARTICLE_CACHE.clear()
-        for fd in feeds_data.values():
-            if fd.status == "success":
-                GLOBAL_ARTICLE_CACHE.extend(fd.articles)
-        # Build HTML here…
+        for v in fd.values():
+            if v.status == "success":
+                GLOBAL_ARTICLE_CACHE.extend(v.articles)
+        # Build your HTML layout here (omitted for brevity)…
+        return f"<p>Loaded {len(fd)} feeds.</p>"
 
     def chat_with_feeds(history: List[List[str]], query: str) -> Tuple[List[List[str]], str]:
         if not query.strip():
-            return history, "Please enter a question."
+            return history, "Enter a question."
         ctx = {e["key"]: e for e in RSS_CONFIG}
-        system_prompt = {
-            "role": "system",
-            "content": (
+        system = {
+            "role":"system",
+            "content":(
                 "You are datanacci-rss-model. "
-                "Using RSS_CONFIG metadata, reply in JSON with keys: category, feed_name, url, created, key, "
-                "technical_metadata (load_time, run_date, source_date), and any article previews. "
+                "Using RSS_CONFIG metadata, reply in JSON with keys: "
+                "category, feed_name, url, created, key, "
+                "technical_metadata (load_time, run_date, source_date), "
+                "and any article previews. "
                 f"CONFIG: {ctx}"
             )
         }
-        msgs = [system_prompt]
-        for h, r in history:
-            msgs += [{"role": "user", "content": h}, {"role": "assistant", "content": r}]
-        msgs.append({"role": "user", "content": query})
-        res = generate_ollama_response("datanacci-rss-model", msgs)
-        history.append([query, res])
+        msgs = [system]
+        for h,a in history:
+            msgs += [{"role":"user","content":h},{"role":"assistant","content":a}]
+        msgs.append({"role":"user","content":query})
+        resp = generate_ollama_response("datanacci-rss-model", msgs)
+        history.append([query, resp])
         return history, ""
 
     def check_ollama_status() -> str:
         try:
-            m = ollama.list().get("models", [])
-            return f"<p style='color:green;'>✅ Ollama running, {len(m)} models</p>"
-        except Exception as e:
-            return f"<p style='color:red;'>❌ Ollama error: {e}</p>"
+            m = ollama.list().get("models",[])
+            return f"<p style='color:green;'>✅ Ollama up, {len(m)} models</p>"
+        except Exception as ex:
+            return f"<p style='color:red;'>❌ Ollama error: {ex}</p>"
 
     with gr.Blocks(title="Datanacci RSS") as app:
         gr.Markdown("# 📰 Datanacci RSS App")
 
         with gr.Tabs():
-            # (your category tabs go here…)
+            # Category tabs
+            for cat in RSS_FEEDS:
+                with gr.TabItem(cat):
+                    gr.Markdown(f"### {cat}")
+                    html = gr.HTML(format_category_feeds_html(cat))
+                    btn = gr.Button("Refresh")
+                    btn.click(fn=format_category_feeds_html, inputs=[gr.State(cat)], outputs=[html])
 
-            # Chat Tab
+            # Chat with RSS tab
             with gr.TabItem("💬 Chat with RSS"):
-                gr.Markdown("Model fixed to datanacci-rss-model; JSON output.")
+                gr.Markdown("**Model fixed to datanacci-rss-model; JSON output.**")
                 chatbot = gr.Chatbot(type="messages")
                 ask = gr.Textbox(placeholder="Ask about feeds...")
                 clr = gr.Button("Clear")
                 ask.submit(chat_with_feeds, [chatbot, ask], [chatbot, ask])
                 clr.click(lambda: None, None, chatbot)
 
-            # Settings Tab
+            # Settings tab
             with gr.TabItem("⚙️ Settings"):
                 tot_cat = len(RSS_FEEDS)
                 tot_feed = sum(len(v) for v in RSS_FEEDS.values())
-                gr.Markdown(f"Categories: {tot_cat} • Feeds: {tot_feed}")
+                gr.Markdown(f"**Categories:** {tot_cat} • **Feeds:** {tot_feed}")
                 items = []
                 for entry in RSS_CONFIG:
-                    url  = entry.get("url", "")
-                    name = entry.get("feed_name", "")
-                    ok   = "✅" if url and requests.get(url, timeout=3).ok else "❌"
+                    url = entry.get("url","")
+                    name = entry.get("feed_name","")
+                    ok = "✅" if url and requests.get(url,timeout=3).ok else "❌"
                     items.append(f"{ok} {name}")
                 gr.Markdown("<br>".join(items))
                 gr.HTML(check_ollama_status())
                 mods = get_ollama_models()
                 okm = "✅" if "datanacci-rss-model" in mods else "❌"
-                gr.Markdown(f"datanacci-rss-model {okm}")
+                gr.Markdown(f"**datanacci-rss-model** {okm}")
 
-            # Configurations Tab
+            # Configurations tab
             with gr.TabItem("🛠️ Configurations"):
                 df = pd.DataFrame(RSS_CONFIG)
                 table = gr.Dataframe(value=df, interactive=False)
+
                 cat_in  = gr.Textbox(label="Category")
                 name_in = gr.Textbox(label="Feed Name")
                 url_in  = gr.Textbox(label="Feed URL")
-                add     = gr.Button("Add Feed")
+                add_btn = gr.Button("Add Feed")
 
                 def _add(cat, nm, u):
-                    ent = {
+                    new = {
                         "category": cat,
                         "feed_name": nm,
                         "url": u,
                         "created": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
                         "key": f"{cat}_{nm}"
                     }
-                    RSS_CONFIG.append(ent)
+                    RSS_CONFIG.append(new)
                     save_config(RSS_CONFIG)
                     return pd.DataFrame(RSS_CONFIG)
-                add.click(_add, [cat_in, name_in, url_in], table)
+
+                add_btn.click(_add, [cat_in, name_in, url_in], table)
 
                 upload = gr.File(file_types=[".json"])
                 def _upl(f):
@@ -287,5 +279,5 @@ def create_enhanced_rss_viewer():
 
         return app
 
-if name == "main":
+if __name__ == "__main__":
     create_enhanced_rss_viewer().launch()
