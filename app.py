@@ -227,7 +227,7 @@ def generate_text(prompt):
             return "SmolLM model not available."
         
         news_response = rss_agent.chat_response(prompt)
-  if news_response:
+        if news_response:
             return news_response
         
         input_ids = np.array([ord(c) for c in prompt[:100]]).reshape(1, -1)  # Limit input length
