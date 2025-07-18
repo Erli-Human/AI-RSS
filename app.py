@@ -20,6 +20,27 @@ import threading
 import ollama
 
 # ——————————————————————————
+# RSS Feed Sources
+# ——————————————————————————
+RSS_FEEDS = {
+    "🤖 AI & MACHINE LEARNING": {
+        "Science Daily - AI": "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
+        "Science Daily - Technology": "https://www.sciencedaily.com/rss/top/technology.xml",
+        "OpenAI Blog": "https://openai.com/blog/rss.xml",
+        "DeepMind Blog": "https://deepmind.com/blog/feed/basic/",
+        "Microsoft AI Blog": "https://blogs.microsoft.com/ai/feed/",
+        "Machine Learning Mastery": "https://machinelearningmastery.com/feed/",
+        "MarkTechPost": "https://www.marktechpost.com/feed/",
+        "Berkeley AI Research": "https://bair.berkeley.edu/blog/feed.xml",
+        "Distill": "https://distill.pub/rss.xml",
+        "AI News": "https://www.artificialintelligence-news.com/feed/",
+        "MIT Technology Review": "https://www.technologyreview.com/feed/",
+        "IEEE Spectrum": "https://spectrum.ieee.org/rss/fulltext"
+    },
+    # … include all your other categories exactly as before …
+}
+
+# ——————————————————————————
 # CONFIGURATION PERSISTENCE
 # ——————————————————————————
 CONFIG_PATH = "rss_config.json"
@@ -47,7 +68,6 @@ def save_config(cfg):
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
 
-# Load or seed on start
 RSS_CONFIG = load_config()
 
 # ——————————————————————————
@@ -68,8 +88,6 @@ class FeedData:
     articles: List[Article]
     last_updated: str
     error: str = ""
-
-# RSS_FEEDS dict remains unchanged here…
 
 GLOBAL_ARTICLE_CACHE: List[Article] = []
 
@@ -140,7 +158,7 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
     return results
 
 # ——————————————————————————
-# OLLAMA UTILS
+# OLLAMA UTILITIES
 # ——————————————————————————
 def get_ollama_models() -> List[str]:
     try:
@@ -160,21 +178,20 @@ def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
 # GRADIO APP
 # ——————————————————————————
 def create_enhanced_rss_viewer():
-    # helper to parse dates
-    def get_pub_date(a):
+    def get_pub_date(a: Article):
         try:
             d = feedparser._parse_date_rfc822(a.published) or feedparser._parse_date_iso8601(a.published)
             return datetime(*d[:6]) if d else datetime.min
         except:
             return datetime.min
 
-    def format_category_feeds_html(cat, n=3):
+    def format_category_feeds_html(cat: str, n: int = 3) -> str:
         feeds_data = fetch_category_feeds_parallel(cat)
         GLOBAL_ARTICLE_CACHE.clear()
         for fd in feeds_data.values():
             if fd.status == "success":
                 GLOBAL_ARTICLE_CACHE.extend(fd.articles)
-        # [Build and return your HTML string as before...]
+        # (build your HTML here exactly as before…)
 
     def chat_with_feeds(history: List[List[str]], query: str) -> Tuple[List[List[str]], str]:
         if not query.strip():
@@ -197,7 +214,7 @@ def create_enhanced_rss_viewer():
         history.append([query, res])
         return history, ""
 
-    def check_ollama_status():
+    def check_ollama_status() -> str:
         try:
             m = ollama.list().get("models", [])
             return f"<p style='color:green;'>✅ Ollama running, {len(m)} models</p>"
@@ -206,13 +223,14 @@ def create_enhanced_rss_viewer():
 
     with gr.Blocks(title="Datanacci RSS") as app:
         gr.Markdown("# 📰 Datanacci RSS App")
+
         with gr.Tabs():
-            # [Your existing category tabs...]
-            
+            # … your category tabs …
+
             # Chat Tab
             with gr.TabItem("💬 Chat with RSS"):
                 gr.Markdown("**Model fixed to datanacci-rss-model; JSON output.**")
-                chatbot = gr.Chatbot()
+                chatbot = gr.Chatbot(type="messages")
                 ask = gr.Textbox(placeholder="Ask about feeds...")
                 clr = gr.Button("Clear")
                 ask.submit(chat_with_feeds, [chatbot, ask], [chatbot, ask])
@@ -253,6 +271,7 @@ def create_enhanced_rss_viewer():
                     RSS_CONFIG.append(ent)
                     save_config(RSS_CONFIG)
                     return pd.DataFrame(RSS_CONFIG)
+
                 add.click(_add, [cat_in, name_in, url_in], table)
 
                 upload = gr.File(file_types=[".json"])
