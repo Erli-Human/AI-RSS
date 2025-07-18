@@ -7,7 +7,7 @@ import pandas as pd
 from io import StringIO, BytesIO
 import base64
 from typing import Dict, Any, List, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 import gradio as gr
 import schedule
 import time
@@ -19,9 +19,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import ollama
 
-——————————————————————————
 RSS Feed Sources
-——————————————————————————
 RSS_FEEDS = {
     "🤖 AI & MACHINE LEARNING": {
         "Science Daily - AI": "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
@@ -37,12 +35,10 @@ RSS_FEEDS = {
         "MIT Technology Review": "https://www.technologyreview.com/feed/",
         "IEEE Spectrum": "https://spectrum.ieee.org/rss/fulltext"
     },
-    # (Add your other categories here…)
+    # Add other categories here...
 }
 
-——————————————————————————
-CONFIGURATION PERSISTENCE
-——————————————————————————
+Configuration Persistence
 CONFIG_PATH = "rss_config.json"
 
 def load_config() -> List[Dict[str, Any]]:
@@ -70,9 +66,7 @@ def save_config(cfg: List[Dict[str, Any]]) -> None:
 
 RSS_CONFIG = load_config()
 
-——————————————————————————
-DATA MODELS
-——————————————————————————
+Data Models
 @dataclass
 class Article:
     title: str
@@ -91,9 +85,7 @@ class FeedData:
 
 GLOBAL_ARTICLE_CACHE: List[Article] = []
 
-——————————————————————————
-RSS FETCHERS
-——————————————————————————
+RSS Fetchers
 def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -102,7 +94,7 @@ def fetch_rss_feed(url: str, feed_name: str, timeout: int = 10) -> FeedData:
         feed = feedparser.parse(r.content)
         if feed.bozo and feed.bozo_exception:
             return FeedData("error", [], datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            error=f"{feed.bozo_exception}")
+                            error=str(feed.bozo_exception))
         arts = []
         for e in feed.entries:
             arts.append(Article(
@@ -136,9 +128,7 @@ def fetch_category_feeds_parallel(category: str, max_workers: int = 5) -> Dict[s
                                        error=str(ex))
     return results
 
-——————————————————————————
-OLLAMA UTILITIES
-——————————————————————————
+Ollama Utilities
 def get_ollama_models() -> List[str]:
     try:
         info = ollama.list()
@@ -153,9 +143,7 @@ def generate_ollama_response(model: str, messages: List[Dict[str, str]]) -> str:
     except Exception as ex:
         return json.dumps({"error": str(ex)})
 
-——————————————————————————
-GRADIO APP
-——————————————————————————
+Gradio App
 def create_enhanced_rss_viewer():
     def get_pub_date(a: Article):
         try:
