@@ -9,5 +9,4 @@ schedule
 pandas
 # Plotting (if needed for visualization)
 matplotlib
-# Ollama client for local LLM integration
-ollama
+
