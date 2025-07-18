@@ -3670,14 +3670,14 @@ print("  4. Model testing functionality")
 print("  5. Improved error handling")
 
 # --- Main Interface ---
-with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="StreamSnap") as demo:
+with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="Datanacci") as demo:
     # Global state
     download_history_state = gr.State(value=load_history(DOWNLOAD_HISTORY_FILE))
     current_transcript_data = {}
     current_vision_analysis = {}
     
     # Initialize GPU acceleration detection
-    print("🚀 Initializing StreamSnap with GPU acceleration...")
+    print("🚀 Initializing Datanacci.blockchain with GPU acceleration...")
     gpu_type, gpu_config = detect_gpu_acceleration()
     if gpu_type:
         print(f"✅ GPU acceleration enabled: {gpu_config['name']}")
@@ -3686,7 +3686,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="StreamSnap") as de
     
     # Header
     gpu_status = f" • {gpu_config['name']}" if gpu_config else ""
-    gr.HTML(f'<div class="main-title">📺 StreamSnap</div><div class="subtitle">Download • Transcribe • Real-Time Object Detection{gpu_status}</div>')
+    gr.HTML(f'<div class="main-title">📺 Datanacci</div><div class="subtitle">Download • Transcribe • Real-Time Object Detection{gpu_status}</div>')
     
     with gr.Tabs():
         # StreamDL Tab (YouTube Download)
@@ -3895,7 +3895,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="StreamSnap") as de
 
     # --- Event Handlers ---
     
-    # StreamSnap events
+    # Datanacci events
     preview_button.click(
         fn=get_video_info, 
         inputs=url_input, 
