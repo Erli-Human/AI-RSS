@@ -24,7 +24,7 @@ beautifulsoup4>=4.12.3
 
 # Voice & Audio
 gTTS>=2.5.0
-speech-recognition>=3.10.4
+speech-recognition
 pyaudio>=0.2.14
 
 # Data Processing
