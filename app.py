@@ -7,13 +7,13 @@ import requests
 # Define URLs for the models
 whisper_encoder_model_url = "https://huggingface.co/onnx-community/whisper-base-ONNX/resolve/main/onnx/encoder_model.onnx"
 whisper_decoder_model_url = "https://huggingface.co/onnx-community/whisper-base-ONNX/resolve/main/onnx/decoder_model.onnx"  # Make sure to use the correct decoder model link if available
-smollm_model_url = "https://huggingface.co/{your_smollm_model}/resolve/main/model.onnx"  # Replace with the actual Smollm model link
-kokoro_model_url = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model.onnx"
+smollm_model_url = "https://huggingface.co/HuggingFaceTB/SmolLM3-3B-ONNX/resolve/main/onnx/model.onnx"  # Updated SmolLM model link
+kokoro_model_url = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model.onnx"  # Updated Kokoro model link
 
 # Define local paths for the models
 whisper_encoder_model_path = "encoder_model.onnx"
 whisper_decoder_model_path = "decoder_model.onnx"
-smollm_model_path = "smollm.onnx"
+smollm_model_path = "smollm_model.onnx"  # Local filename for SmolLM model
 kokoro_model_path = "kokoro_model.onnx"
 
 # Function to download a file
@@ -62,11 +62,11 @@ def whisper_transcribe(audio):
         return "No audio input provided."
 
     audio_data = np.frombuffer(audio, dtype=np.float32).flatten()
-    
+
     # Ensure the encoder expects the correct input size
     encoder_input_name = encoder_session.get_inputs()[0].name
     encoder_output = encoder_session.run(None, {encoder_input_name: audio_data})
-    
+
     # Process through the decoder
     decoder_input_name = decoder_session.get_inputs()[0].name
     decoder_output = decoder_session.run(None, {decoder_input_name: encoder_output[0]})
