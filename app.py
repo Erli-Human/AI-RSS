@@ -5,9 +5,9 @@ import os
 import requests
 
 # Define URLs for the models
-whisper_encoder_model_url = "http://example.com/path/to/encoder.onnx"
-whisper_decoder_model_url = "http://example.com/path/to/decoder.onnx"
-smollm_model_url = "http://example.com/path/to/smollm.onnx"
+whisper_encoder_model_url = "https://huggingface.co/openai/whisper-large-v2/resolve/main/encoder.onnx"
+whisper_decoder_model_url = "https://huggingface.co/openai/whisper-large-v2/resolve/main/decoder.onnx"
+smollm_model_url = "https://huggingface.co/{your_smollm_model}/resolve/main/model.onnx"  # Replace with the actual Smollm model link
 kokoro_model_url = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model.onnx"
 
 # Define local paths for the models
@@ -81,7 +81,7 @@ def generate_text(prompt):
         return "No prompt provided."
     
     # Encode the input text appropriately for your model
-    input_ids = np.array([ord(c) for c in prompt]).reshape(1, -1)  # Adjust as necessary
+    input_ids = np.array([ord(c) for c in prompt]).reshape(1, -1)  # Adjust based on your text encoding strategy
     input_name = smollm_session.get_inputs()[0].name
     output = smollm_session.run(None, {input_name: input_ids})
     generated_text = ''.join(chr(id) for id in output[0][0])  # Adjust according to your model's output needs
