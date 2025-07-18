@@ -1,31 +1,75 @@
 import gradio as gr
 import numpy as np
 import onnxruntime as ort
-import torch
+import os
+import requests
 
-# Load models (update with your specific model paths)
-whisper_model_path = "path/to/whisper.onnx"
-smollm_model_path = "path/to/smollm.onnx"
+# Define URLs for the models (replace these URLs with actual URLs for your models)
+whisper_encoder_model_url = "https://huggingface.co/Lasisi/whisper-small-ONNX/blob/main/onnx/encoder_model.onnx"
+whisper_decoder_model_url = "https://huggingface.co/Lasisi/whisper-small-ONNX/blob/main/onnx/decoder_model.onnx"
+smollm_model_url = "https://huggingface.co/HuggingFaceTB/SmolLM3-3B-ONNX/blob/main/onnx/model.onnx"
+
+# Define paths for the models
+whisper_encoder_model_path = "encoder_model.onnx"
+whisper_decoder_model_path = "decoder_model.onnx"
+smollm_model_path = "model.onnx"
+
+# Function to download a file
+def download_file(url, dest_path):
+    response = requests.get(url)
+    if response.status_code == 200:
+        with open(dest_path, 'wb') as f:
+            f.write(response.content)
+
+# Function to check and download models
+def download_models():
+    if not os.path.exists(whisper_encoder_model_path):
+        print(f"{whisper_encoder_model_path} does not exist. Downloading...")
+        download_file(whisper_encoder_model_url, whisper_encoder_model_path)
+    else:
+        print(f"{whisper_encoder_model_path} already exists.")
+
+    if not os.path.exists(whisper_decoder_model_path):
+        print(f"{whisper_decoder_model_path} does not exist. Downloading...")
+        download_file(whisper_decoder_model_url, whisper_decoder_model_path)
+    else:
+        print(f"{whisper_decoder_model_path} already exists.")
+        
+    if not os.path.exists(smollm_model_path):
+        print(f"{smollm_model_path} does not exist. Downloading...")
+        download_file(smollm_model_url, smollm_model_path)
+    else:
+        print(f"{smollm_model_path} already exists.")
+
+# Download models upon starting the app
+download_models()
 
 # Initialize ONNX Runtime sessions
-whisper_session = ort.InferenceSession(whisper_model_path)
+encoder_session = ort.InferenceSession(whisper_encoder_model_path)
+decoder_session = ort.InferenceSession(whisper_decoder_model_path)
 smollm_session = ort.InferenceSession(smollm_model_path)
 
 # Function to run Whisper model for Speech to Text
 def whisper_transcribe(audio):
     audio_data = np.frombuffer(audio, dtype=np.float32).flatten()
-    # Prepare the input based on the Whisper model requirements
-    # This may require adjusting based on the actual model
-    input_name = whisper_session.get_inputs()[0].name
-    transcription = whisper_session.run(None, {input_name: audio_data})
-    return transcription[0]
+    
+    # Processing through the encoder
+    encoder_input_name = encoder_session.get_inputs()[0].name
+    encoder_output = encoder_session.run(None, {encoder_input_name: audio_data})
+    
+    # Now run the output through the decoder
+    decoder_input_name = decoder_session.get_inputs()[0].name
+    decoder_output = decoder_session.run(None, {decoder_input_name: encoder_output[0]})
+    
+    transcription = decoder_output[0]
+    return transcription
 
 # Function to run Smollm model for Text Generation
 def generate_text(prompt):
     input_ids = np.array([ord(c) for c in prompt]).reshape(1, -1)  # Simple encoding; adjust this
     input_name = smollm_session.get_inputs()[0].name
     output = smollm_session.run(None, {input_name: input_ids})
-    generated_text = ''.join(chr(id) for id in output[0][0])  # This also should match your decoding method
+    generated_text = ''.join(chr(id) for id in output[0][0])  # This should match your decoding method
     return generated_text
 
 # Create a Gradio interface
