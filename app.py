@@ -13,11 +13,11 @@ import onnxruntime as ort
 from transformers import GPT2Tokenizer
 import logging
 
-Configure logging
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(name)
+logger = logging.getLogger(__name__)
 
-Constants
+# Constants
 CONFIG_PATH = "rss_config.json"
 HISTORY_PATH = "article_history.json"
 
@@ -42,6 +42,9 @@ RSS_FEEDS = {
         "Bloomberg Markets": "https://feeds.bloomberg.com/markets/news.rss"
     },
     "🎵 Music": {
+        "EDM.com": "https://edm.com/.rss/full/",
+        "Complex Music": "https://www.complex.com/feeds/rss/music",
+        "Gramophone": "https://www.gramophone.co.uk/rss",
         "Rolling Stone Music": "https://www.rollingstone.com/music/feed/",
         "NME": "https://www.nme.com/feed",
         "Stereogum": "https://www.stereogum.com/feed/",
@@ -92,6 +95,9 @@ RSS_FEEDS = {
         "Giant Bombcast": "https://www.giantbomb.com/podcast-xml/giant-bombcast/"
     },
     "✈️ Travel": {
+        "Food & Wine": "https://www.foodandwine.com/news/feed",
+        "Travel Weekly": "https://www.travelweekly.com/rss/siterubric",
+        "PhocusWire": "https://www.phocuswire.com/rss",
         "Nomadic Matt": "https://www.nomadicmatt.com/travel-blog/feed/",
         "The Blonde Abroad": "https://theblondeabroad.com/feed/",
         "Adventurous Kate": "https://www.adventurouskate.com/feed/",
@@ -119,6 +125,11 @@ RSS_FEEDS = {
         "Skift": "https://skift.com/feed/",
     },
     "💡 Lifestyle": {
+        "Men's Health": "https://www.menshealth.com/feed/",
+        "Parents": "https://www.parents.com/feed/",
+        "What to Expect": "https://www.whattoexpect.com/news/feed",
+        "The Bump": "https://www.thebump.com/feed",
+        "Zen Habits": "https://zenhabits.net/feed/",
         "Cup of Jo": "https://cupofjo.com/feed/",
         "A Beautiful Mess": "https://abeautifulmess.com/feed/",
         "Wit & Delight": "https://witanddelight.com/feed/",
@@ -149,6 +160,13 @@ RSS_FEEDS = {
         "TED Blog": "https://blog.ted.com/feed/"
     },
     "🏡 Home & Garden": {
+        "This Old House": "https://www.thisoldhouse.com/feed",
+        "Rodale Institute": "https://rodaleinstitute.org/feed/",
+        "Houzz": "https://www.houzz.com/rss/all",
+        "Permaculture Magazine": "https://www.permaculture.co.uk/feed",
+        "Grit Magazine": "https://www.grit.com/feed/",
+        "Mother Earth News": "https://www.motherearthnews.com/feed",
+        "Unclutterer": "https://unclutterer.com/feed/",
         "Gardenista": "https://www.gardenista.com/feed/",
         "Fine Gardening": "https://www.finegardening.com/feed",
         "Horticulture Magazine": "https://www.hortmag.com/feed",
@@ -185,16 +203,16 @@ GPT2_SESSION = None
 GPT2_TOKENIZER = None
 MODEL_AVAILABLE = False
 
-Check if model exists, if not download it
+# Check if model exists, if not download it
 if not os.path.exists(GPT2_MODEL_PATH):
     logger.info(f"📥 GPT-2 model not found. Downloading from Hugging Face...")
     try:
         response = requests.get(GPT2_MODEL_URL, stream=True, timeout=30)
         response.raise_for_status()
-
+        
         # Get total file size
         total_size = int(response.headers.get('content-length', 0))
-
+        
         # Download with progress
         with open(GPT2_MODEL_PATH, 'wb') as file:
             downloaded = 0
@@ -205,13 +223,13 @@ if not os.path.exists(GPT2_MODEL_PATH):
                     if total_size > 0:
                         percent = (downloaded / total_size) * 100
                         print(f"\rDownloading: {percent:.1f}%", end='', flush=True)
-
+        
         logger.info(f"\n✅ Model downloaded successfully to {GPT2_MODEL_PATH}")
     except Exception as e:
         logger.error(f"❌ Failed to download model: {e}")
         logger.info(f"Please download manually from: {GPT2_MODEL_URL}")
 
-Load the model and tokenizer
+# Load the model and tokenizer
 if os.path.exists(GPT2_MODEL_PATH):
     try:
         logger.info(f"🔄 Loading GPT-2 model and tokenizer...")
@@ -253,12 +271,12 @@ def init_config():
     cfg = load_json(CONFIG_PATH)
     # Create a dict to track unique URLs and avoid duplicates
     url_to_feed = {}
-
+    
     # First pass: collect existing feeds
     for f in cfg:
         if isinstance(f, dict) and "url" in f:
             url_to_feed[f["url"]] = f
-
+    
     updated = False
     # Second pass: add new feeds from RSS_FEEDS
     for cat, feeds in RSS_FEEDS.items():
@@ -273,10 +291,10 @@ def init_config():
                 }
                 url_to_feed[url] = feed_entry
                 updated = True
-
+    
     # Convert back to list, preserving deduplication
     cfg = list(url_to_feed.values())
-
+    
     if updated:
         save_json(CONFIG_PATH, cfg)
     return cfg
@@ -308,11 +326,11 @@ def update_history():
     for a in history:
         if isinstance(a, dict) and "link" in a:
             links.add(a["link"])
-
+    
     new = 0
     # Track processed URLs to avoid duplicates
     processed_urls = set()
-
+    
     with ThreadPoolExecutor(max_workers=8) as exe:
         # Deduplicate feeds by URL
         unique_feeds = {}
@@ -321,7 +339,7 @@ def update_history():
                 url = f["url"]
                 if url not in unique_feeds:
                     unique_feeds[url] = f
-
+        
         fut2 = {exe.submit(fetch_feed, f["url"], f["feed_name"]): f for f in unique_feeds.values()}
         for fut in as_completed(fut2):
             for art in fut.result():
@@ -350,15 +368,15 @@ def generate_text(prompt: str) -> str:
         # Create position IDs
         seq_len = input_ids.shape[1]
         position_ids = np.arange(seq_len, dtype=np.int64).reshape(1, -1)
-
+        
         input_names = [inp.name for inp in GPT2_SESSION.get_inputs()]
-
+        
         onnx_inputs = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
         }
-
+        
         # The model requires past_key_values, but this is the first token, so we provide dummy/empty values.
         # Assuming GPT-2 small (12 layers, 12 heads, 64 embed size per head)
         num_layers = 12 
@@ -373,48 +391,48 @@ def generate_text(prompt: str) -> str:
 
         # Run inference
         outputs = GPT2_SESSION.run(None, onnx_inputs)
-
+        
         # Get logits (usually the first output)
         logits = outputs[0]
-
+        
         # Get the predicted token (argmax of the last position)
         predicted_token_id = np.argmax(logits[0, -1, :])
-
+        
         # Decode the predicted token
         predicted_text = GPT2_TOKENIZER.decode([predicted_token_id])
-
+        
         return f"{prompt}{predicted_text}"
-
+        
     except Exception as e:
         logger.error(f"Error in text generation: {e}")
         logger.debug(f"Model inputs: {[inp.name for inp in GPT2_SESSION.get_inputs()]}")
         logger.debug(f"Model outputs: {[out.name for out in GPT2_SESSION.get_outputs()]}")
-
+        
         return f"I understand you're asking about: '{prompt}'. However, I encountered an error. Please try browsing the RSS feeds instead." 
 
 def create_feed_display(feed_name: str, feed_url: str, layout: str = "cards"):
     """Create a display for a single feed showing recent articles"""
     articles = fetch_feed(feed_url, feed_name)
-
+    
     if not articles:
         return f"<h3>{feed_name}</h3><p><em>Unable to fetch articles or no articles available.</em></p>"
-
+    
     # Escape HTML characters
     def escape_html(text):
         return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;')
-
+    
     html_content = f"<h3 style='margin-bottom: 20px;'>{feed_name}</h3>"
-
+    
     if layout == "cards":
         # Card layout with grid
         html_content += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;">'
-
+        
         for article in articles:
             title = escape_html(article.title)
             summary = escape_html(article.summary)
             # Extract first 150 chars for card preview
             preview = summary[:150] + "..." if len(summary) > 150 else summary
-
+            
             html_content += f"""
             <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; 
                         background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
@@ -432,14 +450,14 @@ def create_feed_display(feed_name: str, feed_url: str, layout: str = "cards"):
                 <p style='color: #333; font-size: 0.9em; line-height: 1.5; margin: 0;'>{preview}</p>
             </div>
             """
-
+        
         html_content += '</div>'
     else:
         # List layout (original)
         for article in articles:
             title = escape_html(article.title)
             summary = escape_html(article.summary)
-
+            
             html_content += f"""
             <div style='border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px;'>
                 <h4><a href='{article.link}' target='_blank' style='text-decoration: none; color: #1a73e8;'>{title}</a></h4>
@@ -447,7 +465,7 @@ def create_feed_display(feed_name: str, feed_url: str, layout: str = "cards"):
                 <p>{summary}</p>
             </div>
             """
-
+    
     return html_content
 
 def create_category_tab(category_name: str, feeds: Dict[str, str]):
@@ -461,29 +479,29 @@ def create_category_tab(category_name: str, feeds: Dict[str, str]):
                 label="Layout",
                 scale=1
             )
-
+        
         with gr.Tabs():
             for feed_name, feed_url in feeds.items():
                 with gr.Tab(feed_name):
                     # Create refresh button and display for this feed
                     with gr.Row():
                         refresh_btn = gr.Button(f"🔄 Refresh {feed_name}", scale=1)
-
+                    
                     feed_display = gr.HTML(value=create_feed_display(feed_name, feed_url, "cards"))
-
+                    
                     # Refresh functionality with closure to capture feed_name and feed_url
                     def make_refresh_fn(name, url):
                         def refresh_feed(layout):
                             return create_feed_display(name, url, layout)
                         return refresh_feed
-
+                    
                     # Update on refresh button click
                     refresh_btn.click(
                         fn=make_refresh_fn(feed_name, feed_url),
                         inputs=[layout_radio],
                         outputs=feed_display
                     )
-
+                    
                     # Update on layout change
                     layout_radio.change(
                         fn=make_refresh_fn(feed_name, feed_url),
@@ -509,7 +527,7 @@ def create_app():
 
     with gr.Blocks(title="Datanacci RSS Reader") as app:
         gr.Markdown("# Datanacci RSS Reader with ONNX GPT2")
-
+        
         # Helper function to update history display, now in a broader scope
         def update_history_display(layout):
             history = load_json(HISTORY_PATH)
@@ -554,7 +572,7 @@ def create_app():
         with gr.Tabs():
             for category_name, feeds in RSS_FEEDS.items():
                 create_category_tab(category_name, feeds)
-
+            
             with gr.Tab("📊 All History"):
                 with gr.Row():
                     btn = gr.Button("🔄 Fetch All RSS Feeds", scale=1)
@@ -562,13 +580,13 @@ def create_app():
                 status = gr.Markdown()
                 history_cards = gr.HTML(visible=True)
                 history_table = gr.Dataframe(value=pd.DataFrame(load_json(HISTORY_PATH)), interactive=False, visible=False)
-
+                
                 initial_cards, initial_table = update_history_display("cards")
                 history_cards.value = initial_cards['value']
-
+                
                 btn.click(lambda: refresh_history(history_layout.value, silent=False), outputs=[status, history_cards, history_table])
                 history_layout.change(update_history_display, inputs=[history_layout], outputs=[history_cards, history_table])
-
+            
             with gr.Tab("💬 Chat") as chat_tab:
                 chatbot = gr.Chatbot(type="messages", value=[])
                 txt = gr.Textbox(placeholder="Ask about the articles...")
@@ -588,12 +606,3 @@ def create_app():
                 inputs=[],
                 outputs=[status, history_cards, history_table]
             )
-
-    return app
-
-if name == "main":
-    init_config()
-    print("\n🚀 Starting Datanacci RSS Reader...")
-    print("📌 The app will open in your browser at http://127.0.0.1:7860")
-    print("📌 Press Ctrl+C to stop the server\n")
-    create_app().launch(server_name="127.0.0.1", server_port=7860, share=False)
