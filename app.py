@@ -43,7 +43,7 @@ RSS_FEEDS = {
     },
     "🎵 Music": {
         "Rolling Stone Music": "https://www.rollingstone.com/music/feed/",
-        "NME": "https://www.nme.com/feed/",
+        "NME": "https://www.nme.com/feed",
         "Stereogum": "https://www.stereogum.com/feed/",
         "Consequence of Sound": "https://consequence.net/feed/",
         "Spin": "https://www.spin.com/feed/",
@@ -497,7 +497,8 @@ def create_app():
         if not query.strip():
             return history, None
         ctx = load_json(HISTORY_PATH)
-        sys = {"role": "system", "content": f"CONTEXT:{json.dumps(ctx)[:1000]}..."}
+        # Use a larger portion of the history for context
+        sys = {"role": "system", "content": f"CONTEXT:{json.dumps(ctx)[:8000]}..."}
         full = sys["content"] + "\n"
         for h in history:
             full += f"{h['role']}: {h['content']}\n"
@@ -510,97 +511,84 @@ def create_app():
     with gr.Blocks(title="Datanacci RSS Reader") as app:
         gr.Markdown("# Datanacci RSS Reader with ONNX GPT2")
 
+        # Helper function to update history display, now in a broader scope
+        def update_history_display(layout):
+            history = load_json(HISTORY_PATH)
+            if layout == "cards":
+                if not history:
+                    cards_html = "<p>No articles in history. Click 'Fetch All RSS Feeds' to get started.</p>"
+                else:
+                    cards_html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-top: 20px;">'
+                    for article in history[:50]:
+                        if isinstance(article, dict):
+                            title = article.get('title', 'No title').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                            link = article.get('link', '#')
+                            published = article.get('published', 'Unknown')
+                            summary = article.get('summary', '')[:200] + '...'
+                            feed_name = article.get('feed_name', 'Unknown Feed')
+                            cards_html += f"""
+                            <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px;
+                                       background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+                                <div style='color: #1a73e8; font-size: 0.85em; margin-bottom: 8px;'>📰 {feed_name}</div>
+                                <h4 style='margin: 0 0 12px 0; font-size: 1.1em; line-height: 1.3;'>
+                                    <a href='{link}' target='_blank' style='text-decoration: none; color: #333;'>{title}</a>
+                                </h4>
+                                <p style='color: #666; font-size: 0.85em; margin: 0 0 12px 0;'>📅 {published}</p>
+                                <p style='color: #555; font-size: 0.9em; line-height: 1.4; margin: 0;'>{summary}</p>
+                            </div>
+                            """
+                    cards_html += '</div>'
+                    if len(history) > 50:
+                        cards_html += f'<p style="text-align: center; margin-top: 20px; color: #666;">Showing 50 of {len(history)} articles</p>'
+                return gr.update(value=cards_html, visible=True), gr.update(visible=False)
+            else:
+                return gr.update(visible=False), gr.update(value=pd.DataFrame(history), visible=True)
+
+        # Combined refresh logic
+        def refresh_history(layout, silent=False):
+            status_msg = update_history()
+            cards_update, table_update = update_history_display(layout)
+            if silent:
+                return gr.update(value=""), cards_update, table_update
+            return status_msg, cards_update, table_update
+
         with gr.Tabs():
-            # Create tabs for each RSS category
             for category_name, feeds in RSS_FEEDS.items():
                 create_category_tab(category_name, feeds)
 
-            # History tab with card view
             with gr.Tab("📊 All History"):
                 with gr.Row():
                     btn = gr.Button("🔄 Fetch All RSS Feeds", scale=1)
-                    history_layout = gr.Radio(
-                        choices=["cards", "table"],
-                        value="cards",
-                        label="View",
-                        scale=1
-                    )
-
+                    history_layout = gr.Radio(choices=["cards", "table"], value="cards", label="View", scale=1)
                 status = gr.Markdown()
-
-                # Card view for history
                 history_cards = gr.HTML(visible=True)
                 history_table = gr.Dataframe(value=pd.DataFrame(load_json(HISTORY_PATH)), interactive=False, visible=False)
 
-                def update_history_display(layout):
-                    history = load_json(HISTORY_PATH)
-                    if layout == "cards":
-                        # Create card view for history
-                        if not history:
-                            cards_html = "<p>No articles in history. Click 'Fetch All RSS Feeds' to get started.</p>"
-                        else:
-                            cards_html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-top: 20px;">'
-
-                            # Show latest 50 articles
-                            for article in history[:50]:
-                                if isinstance(article, dict):
-                                    title = article.get('title', 'No title').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                                    link = article.get('link', '#')
-                                    published = article.get('published', 'Unknown')
-                                    summary = article.get('summary', '')[:200] + '...'
-                                    feed_name = article.get('feed_name', 'Unknown Feed')
-
-                                    cards_html += f"""
-                                    <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px;
-                                               background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
-                                        <div style='color: #1a73e8; font-size: 0.85em; margin-bottom: 8px;'>📰 {feed_name}</div>
-                                        <h4 style='margin: 0 0 12px 0; font-size: 1.1em; line-height: 1.3;'>
-                                            <a href='{link}' target='_blank' style='text-decoration: none; color: #333;'>{title}</a>
-                                        </h4>
-                                        <p style='color: #666; font-size: 0.85em; margin: 0 0 12px 0;'>📅 {published}</p>
-                                        <p style='color: #555; font-size: 0.9em; line-height: 1.4; margin: 0;'>{summary}</p>
-                                    </div>
-                                    """
-
-                            cards_html += '</div>'
-                            if len(history) > 50:
-                                cards_html += f'<p style="text-align: center; margin-top: 20px; color: #666;">Showing 50 of {len(history)} articles</p>'
-
-                        return gr.update(value=cards_html, visible=True), gr.update(visible=False)
-                    else:
-                        return gr.update(visible=False), gr.update(value=pd.DataFrame(history), visible=True)
-
-                def ref():
-                    s = update_history()
-                    history = load_json(HISTORY_PATH)
-                    cards_update, table_update = update_history_display(history_layout.value)
-                    return s, cards_update, table_update
-
-                # Initial display
                 initial_cards, initial_table = update_history_display("cards")
                 history_cards.value = initial_cards['value']
 
-                btn.click(ref, outputs=[status, history_cards, history_table])
-                history_layout.change(
-                    fn=lambda layout: update_history_display(layout),
-                    inputs=[history_layout],
-                    outputs=[history_cards, history_table]
-                )
+                btn.click(lambda: refresh_history(history_layout.value, silent=False), outputs=[status, history_cards, history_table])
+                history_layout.change(update_history_display, inputs=[history_layout], outputs=[history_cards, history_table])
 
-            # Chat tab
-            with gr.Tab("💬 Chat"):
+            with gr.Tab("💬 Chat") as chat_tab:
                 chatbot = gr.Chatbot(type="messages", value=[])
                 txt = gr.Textbox(placeholder="Ask about the articles...")
                 clr = gr.Button("Clear Chat")
                 txt.submit(chat, [chatbot, txt], [chatbot, txt])
                 clr.click(lambda: [], None, chatbot)
 
-            # Config tab
             with gr.Tab("⚙️ Config"):
                 cfg_df = gr.Dataframe(value=pd.DataFrame(init_config()), interactive=True)
                 def save_cfg(df):
                     save_json(CONFIG_PATH, df.to_dict("records"))
                 cfg_df.change(save_cfg, cfg_df, None)
+
+            # Add event handler for chat tab selection to refresh history
+            chat_tab.select(
+                lambda: refresh_history(history_layout.value, silent=True),
+                inputs=[],
+                outputs=[status, history_cards, history_table]
+            )
 
     return app
 
