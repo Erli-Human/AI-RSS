@@ -158,7 +158,7 @@ RSS_FEEDS = {
         "Eurogamer": "https://www.eurogamer.net/?format=rss",
         "Rock Paper Shotgun": "https://www.rockpapershotgun.com/feed",
         "VG247": "https://www.vg247.com/feed/",
-        "Destructoid": "https://www.destructoid.com/feed",
+        "Destructoid": "https://www.destructoid.com/feed/",
         "PlayStation Blog": "https://blog.playstation.com/feed/",
         "Xbox Wire": "https://news.xbox.com/en-us/feed/",
         "Nintendo Life": "https://www.nintendolife.com/feeds/latest",
@@ -380,6 +380,12 @@ def fetch_feed(url, name):
                 feed_name=name
             ) for e in feed.entries[:15]
         ]
+    except requests.exceptions.ConnectionError as e:
+        if "NameResolutionError" in str(e):
+            logger.warning(f"Failed to resolve hostname for {name} at {url}. Please check your network connection and DNS settings.")
+        else:
+            logger.warning(f"Connection error while fetching feed {name} from {url}: {e}")
+        return []
     except Exception as e:
         logger.warning(f"Failed to fetch feed {name} from {url}: {e}")
         return []
@@ -393,7 +399,7 @@ def update_history():
         if isinstance(a, dict) and "link" in a:
             links.add(a["link"])
 
-    new = 0
+    new_articles = []
     # Track processed URLs to avoid duplicates
     processed_urls = set()
 
@@ -410,14 +416,18 @@ def update_history():
         for fut in as_completed(fut2):
             for art in fut.result():
                 if art.link not in links:
-                    history.append(asdict(art))
+                    article_dict = asdict(art)
+                    history.append(article_dict)
+                    new_articles.append(article_dict)
                     links.add(art.link)
-                    new += 1
-    if new:
+    
+    if new_articles:
+        # Sort all history by date, most recent first
         history.sort(key=lambda x: x.get("published", ""), reverse=True)
         save_json(HISTORY_PATH, history)
-        return f"✅ {new} new articles. Total {len(history)}."
-    return f"ℹ️ No new articles. Total {len(history)}."
+        return f"✅ {len(new_articles)} new articles. Total {len(history)}.", [a['link'] for a in new_articles]
+    
+    return f"ℹ️ No new articles. Total {len(history)}.", []
 
 def generate_text(prompt: str) -> str:
     if not prompt:
@@ -593,25 +603,50 @@ def create_app():
 
     with gr.Blocks(title="Datanacci RSS Reader") as app:
         gr.Markdown("# Datanacci RSS Reader with ONNX GPT2")
+        
+        ARTICLES_PER_PAGE = 25
 
-        # Helper function to update history display, now in a broader scope
-        def update_history_display(layout):
+        # Helper function to update history display, now with pagination and highlighting
+        def update_history_display(layout, page_num, new_article_links=None):
+            if new_article_links is None:
+                new_article_links = []
+
             history = load_json(HISTORY_PATH)
+            total_articles = len(history)
+            total_pages = (total_articles + ARTICLES_PER_PAGE - 1) // ARTICLES_PER_PAGE or 1
+            
+            # Clamp page number
+            page_num = max(1, min(page_num, total_pages))
+            
+            start_idx = (page_num - 1) * ARTICLES_PER_PAGE
+            end_idx = start_idx + ARTICLES_PER_PAGE
+            paginated_history = history[start_idx:end_idx]
+            
+            page_info = f"Page {page_num} of {total_pages}"
+            
+            cards_html_update = gr.update()
+            table_update = gr.update()
+
             if layout == "cards":
-                if not history:
+                if not paginated_history:
                     cards_html = "<p>No articles in history. Click 'Fetch All RSS Feeds' to get started.</p>"
                 else:
                     cards_html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-top: 20px;">'
-                    for article in history[:50]:
+                    for article in paginated_history:
                         if isinstance(article, dict):
                             title = article.get('title', 'No title').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                             link = article.get('link', '#')
                             published = article.get('published', 'Unknown')
                             summary = article.get('summary', '')[:200] + '...'
                             feed_name = article.get('feed_name', 'Unknown Feed')
-                            cards_html += f"""
-                            <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px;
-                                       background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+                            
+                            # Highlight new articles
+                            card_style = 'border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'
+                            if link in new_article_links:
+                                card_style += 'background-color: #e3f2fd;' # Light blue background for new articles
+
+                            cards_html += f'''
+                            <div style='{card_style}'>
                                 <div style='color: #1a73e8; font-size: 0.85em; margin-bottom: 8px;'>📰 {feed_name}</div>
                                 <h4 style='margin: 0 0 12px 0; font-size: 1.1em; line-height: 1.3;'>
                                     <a href='{link}' target='_blank' style='text-decoration: none; color: #333;'>{title}</a>
@@ -619,39 +654,83 @@ def create_app():
                                 <p style='color: #666; font-size: 0.85em; margin: 0 0 12px 0;'>📅 {published}</p>
                                 <p style='color: #555; font-size: 0.9em; line-height: 1.4; margin: 0;'>{summary}</p>
                             </div>
-                            """
+                            '''
                     cards_html += '</div>'
-                    if len(history) > 50:
-                        cards_html += f'<p style="text-align: center; margin-top: 20px; color: #666;">Showing 50 of {len(history)} articles</p>'
-                return gr.update(value=cards_html, visible=True), gr.update(visible=False)
-            else:
-                return gr.update(visible=False), gr.update(value=pd.DataFrame(history), visible=True)
+                cards_html_update = gr.update(value=cards_html, visible=True)
+                table_update = gr.update(visible=False)
+            else: # Table view
+                df = pd.DataFrame(paginated_history)
+                cards_html_update = gr.update(visible=False)
+                table_update = gr.update(value=df, visible=True)
+            
+            return cards_html_update, table_update, gr.update(value=page_info), page_num
 
         # Combined refresh logic
         def refresh_history(layout, silent=False):
-            status_msg = update_history()
-            cards_update, table_update = update_history_display(layout)
+            status_msg, new_links = update_history()
+            cards_update, table_update, page_info_update, page_num_update = update_history_display(layout, 1, new_links)
+            
             if silent:
-                return gr.update(value=""), cards_update, table_update
-            return status_msg, cards_update, table_update
+                return gr.update(value=""), cards_update, table_update, page_info_update, page_num_update
+
+            return status_msg, cards_update, table_update, page_info_update, page_num_update
 
         with gr.Tabs():
             for category_name, feeds in RSS_FEEDS.items():
                 create_category_tab(category_name, feeds)
 
             with gr.Tab("📊 All History"):
+                page_state = gr.State(1)
+                
                 with gr.Row():
                     btn = gr.Button("🔄 Fetch All RSS Feeds", scale=1)
                     history_layout = gr.Radio(choices=["cards", "table"], value="cards", label="View", scale=1)
+                
                 status = gr.Markdown()
+                
+                with gr.Row(equal_height=True):
+                    prev_btn = gr.Button("⬅️ Previous")
+                    page_info = gr.Markdown("Page 1 of 1")
+                    next_btn = gr.Button("Next ➡️")
+
                 history_cards = gr.HTML(visible=True)
-                history_table = gr.Dataframe(value=pd.DataFrame(load_json(HISTORY_PATH)), interactive=False, visible=False)
+                history_table = gr.Dataframe(interactive=False, visible=False)
 
-                initial_cards, initial_table = update_history_display("cards")
-                history_cards.value = initial_cards['value']
+                def on_load():
+                    return update_history_display("cards", 1, [])
 
-                btn.click(lambda: refresh_history(history_layout.value, silent=False), outputs=[status, history_cards, history_table])
-                history_layout.change(update_history_display, inputs=[history_layout], outputs=[history_cards, history_table])
+                app.load(fn=on_load, outputs=[history_cards, history_table, page_info, page_state])
+
+                btn.click(
+                    fn=refresh_history, 
+                    inputs=[history_layout], 
+                    outputs=[status, history_cards, history_table, page_info, page_state]
+                )
+                
+                def change_layout(layout):
+                    # When changing layout, go back to page 1
+                    return update_history_display(layout, 1, [])
+
+                history_layout.change(
+                    fn=change_layout, 
+                    inputs=[history_layout], 
+                    outputs=[history_cards, history_table, page_info, page_state]
+                )
+                
+                def change_page(layout, current_page, direction):
+                    new_page = current_page + direction
+                    return update_history_display(layout, new_page, [])
+
+                prev_btn.click(
+                    fn=change_page,
+                    inputs=[history_layout, page_state, gr.State(-1)],
+                    outputs=[history_cards, history_table, page_info, page_state]
+                )
+                next_btn.click(
+                    fn=change_page,
+                    inputs=[history_layout, page_state, gr.State(1)],
+                    outputs=[history_cards, history_table, page_info, page_state]
+                )
 
             with gr.Tab("💬 Chat") as chat_tab:
                 chatbot = gr.Chatbot(type="messages", value=[])
@@ -667,10 +746,13 @@ def create_app():
                 cfg_df.change(save_cfg, cfg_df, None)
 
             # Add event handler for chat tab selection to refresh history
+            def silent_refresh(layout):
+                return refresh_history(layout, silent=True)
+            
             chat_tab.select(
-                lambda: refresh_history(history_layout.value, silent=True),
-                inputs=[],
-                outputs=[status, history_cards, history_table]
+                fn=silent_refresh,
+                inputs=[history_layout],
+                outputs=[status, history_cards, history_table, page_info, page_state]
             )
 
     return app
