@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import onnxruntime as ort
 
+# Constants
 CONFIG_PATH = "rss_config.json"
 HISTORY_PATH = "article_history.json"
 
