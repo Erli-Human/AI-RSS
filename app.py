@@ -318,7 +318,7 @@ def fetch_feed(url, name):
                 summary=e.get("summary","")[:300]+"...",
                 author=e.get("author",""),
                 feed_name=name
-            ) for e in feed.entries
+            ) for e in feed.entries[:5]  # Limit to 5 most recent
         ]
     except:
         return []
@@ -353,6 +353,48 @@ def generate_text(prompt: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
+def create_feed_display(feed_name: str, feed_url: str):
+    """Create a display for a single feed showing recent articles"""
+    articles = fetch_feed(feed_url, feed_name)
+    
+    if not articles:
+        return gr.Markdown(f"### {feed_name}\n\n*Unable to fetch articles or no articles available.*")
+    
+    # Create HTML for article display
+    html_content = f"<h3>{feed_name}</h3>"
+    for article in articles:
+        html_content += f"""
+        <div style='border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px;'>
+            <h4><a href='{article.link}' target='_blank' style='text-decoration: none; color: #1a73e8;'>{article.title}</a></h4>
+            <p style='color: #666; font-size: 0.9em;'>Published: {article.published}</p>
+            <p>{article.summary}</p>
+        </div>
+        """
+    
+    return gr.HTML(html_content)
+
+def create_category_tab(category_name: str, feeds: Dict[str, str]):
+    """Create a tab for a category with nested tabs for each feed"""
+    with gr.Tab(category_name):
+        with gr.Tabs():
+            for feed_name, feed_url in feeds.items():
+                with gr.Tab(feed_name):
+                    # Create refresh button and display for this feed
+                    refresh_btn = gr.Button(f"Refresh {feed_name}", scale=1)
+                    feed_display = gr.HTML()
+                    
+                    # Initial load
+                    feed_display.value = create_feed_display(feed_name, feed_url).value
+                    
+                    # Refresh functionality
+                    def refresh_feed(name=feed_name, url=feed_url):
+                        return create_feed_display(name, url).value
+                    
+                    refresh_btn.click(
+                        fn=refresh_feed,
+                        outputs=feed_display
+                    )
+
 def create_app():
     def chat(history: List[Dict[str,str]], query: str) -> Tuple[List[Dict[str,str]],None]:
         if not query.strip(): return history, None
@@ -367,28 +409,39 @@ def create_app():
         history.append({"role":"assistant","content":r})
         return history, None
 
-    with gr.Blocks() as app:
-        gr.Markdown("# Datanacci RSS with ONNX GPT2")
+    with gr.Blocks(title="Datanacci RSS Reader") as app:
+        gr.Markdown("# Datanacci RSS Reader with ONNX GPT2")
+        
         with gr.Tabs():
-            with gr.TabItem("History"):
-                btn = gr.Button("Fetch RSS")
+            # Create tabs for each RSS category
+            for category_name, feeds in RSS_FEEDS.items():
+                create_category_tab(category_name, feeds)
+            
+            # History tab
+            with gr.Tab("📊 All History"):
+                btn = gr.Button("Fetch All RSS Feeds")
                 status = gr.Markdown()
                 df = gr.Dataframe(value=pd.DataFrame(load_json(HISTORY_PATH)), interactive=False)
                 def ref():
                     s = update_history()
                     return s, pd.DataFrame(load_json(HISTORY_PATH))
                 btn.click(ref, outputs=[status, df])
-            with gr.TabItem("Chat"):
+            
+            # Chat tab
+            with gr.Tab("💬 Chat"):
                 chatbot = gr.Chatbot(type="messages", value=[])
-                txt = gr.Textbox(placeholder="Ask...")
-                clr = gr.Button("Clear")
+                txt = gr.Textbox(placeholder="Ask about the articles...")
+                clr = gr.Button("Clear Chat")
                 txt.submit(chat, [chatbot, txt], [chatbot, txt])
                 clr.click(lambda: [], None, chatbot)
-            with gr.TabItem("Config"):
+            
+            # Config tab
+            with gr.Tab("⚙️ Config"):
                 cfg_df = gr.Dataframe(value=pd.DataFrame(init_config()), interactive=True)
                 def save_cfg(df):
                     save_json(CONFIG_PATH, df.to_dict("records"))
                 cfg_df.change(save_cfg, cfg_df, None)
+    
     return app
 
 if __name__=="__main__":
