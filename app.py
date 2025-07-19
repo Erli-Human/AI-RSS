@@ -10,6 +10,12 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import onnxruntime as ort
+from transformers import GPT2Tokenizer
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Constants
 CONFIG_PATH = "rss_config.json"
@@ -20,12 +26,7 @@ RSS_FEEDS = {
         "OpenAI Blog": "https://openai.com/blog/rss.xml",
         "Hugging Face Blog": "https://huggingface.co/blog/feed.xml"
     },
-    "🚨 Breaking News": {
-        "Reuters Top News": "http://feeds.reuters.com/reuters/topNews",
-        "Associated Press": "https://apnews.com/hub/ap-top-news/rss"
-    },
     "🌍 World News": {
-        "Reuters World News": "http://feeds.reuters.com/Reuters/worldNews",
         "BBC World News": "http://feeds.bbci.co.uk/news/world/rss.xml",
         "Global News": "https://globalnews.ca/feed/"
     },
@@ -34,19 +35,16 @@ RSS_FEEDS = {
         "Wired": "https://www.wired.com/feed/rss"
     },
     "⚽ Sports": {
-        "ESPN": "https://www.espn.com/espn/rss/news",
-        "Olympic News": "https://olympics.com/en/rss/"
+        "ESPN": "https://www.espn.com/espn/rss/news"
     },
     "💼 Business": {
         "Financial Times": "https://www.ft.com/rss/home",
         "Bloomberg Markets": "https://feeds.bloomberg.com/markets/news.rss"
     },
     "🎵 Music": {
-        "Pitchfork Reviews": "http://pitchfork.com/rss/reviews/albums/",
         "Rolling Stone Music": "https://www.rollingstone.com/music/feed/",
         "NME": "https://www.nme.com/feed",
         "Stereogum": "https://www.stereogum.com/feed/",
-        "The Fader": "https://www.thefader.com/rss",
         "Consequence of Sound": "https://consequence.net/feed/",
         "Spin": "https://www.spin.com/feed/",
         "Billboard": "https://www.billboard.com/feed/",
@@ -54,10 +52,7 @@ RSS_FEEDS = {
         "Brooklyn Vegan": "https://www.brooklynvegan.com/feed/",
         "Gorilla vs Bear": "https://www.gorillavsbear.net/feed/",
         "Hypebeast Music": "https://hypebeast.com/music/feed",
-        "Resident Advisor": "https://ra.co/feed",
-        "Mixmag": "https://mixmag.net/feed",
         "DJ Mag": "https://djmag.com/rss.xml",
-        "Your EDM": "https://www.youredm.com/feed/",
         "Dancing Astronaut": "https://dancingastronaut.com/feed/",
         "EDM.com": "https://edm.com/feed",
         "Complex Music": "https://www.complex.com/music/rss",
@@ -85,60 +80,38 @@ RSS_FEEDS = {
         "Eurogamer": "https://www.eurogamer.net/?format=rss",
         "Rock Paper Shotgun": "https://www.rockpapershotgun.com/feed",
         "VG247": "https://www.vg247.com/feed/",
-        "GamesRadar": "https://www.gamesradar.com/rss/",
         "Destructoid": "https://www.destructoid.com/feed",
-        "The Verge Gaming": "https://www.theverge.com/games/rss/index.xml",
         "PlayStation Blog": "https://blog.playstation.com/feed/",
         "Xbox Wire": "https://news.xbox.com/en-us/feed/",
         "Nintendo Life": "https://www.nintendolife.com/feeds/latest",
         "Steam Blog": "https://store.steampowered.com/feeds/",
-        "Epic Games": "https://www.epicgames.com/site/en-US/rss",
-        "Indie DB": "https://rss.indiedb.com/games/feed",
-        "Gamasutra": "https://www.gamasutra.com/rss",
         "TIGSource": "https://forums.tigsource.com/index.php?type=rss;action=.xml",
-        "Retro Gamer": "https://www.retrogamer.net/feed",
         "TouchArcade": "https://toucharcade.com/feed/",
         "Pocket Gamer": "https://www.pocketgamer.com/rss/",
         "Esports Insider": "https://esportsinsider.com/feed/",
-        "The Esports Observer": "https://esportsobserver.com/feed/",
         "Dot Esports": "https://dotesports.com/feed",
-        "Giant Bomb": "https://www.giantbomb.com/feeds/",
-        "Waypoint": "https://www.vice.com/en/rss/section/games",
         "Tom's Hardware": "https://www.tomshardware.com/feeds/all",
         "PC World": "https://www.pcworld.com/feed",
-        "Giant Bombcast": "https://www.giantbomb.com/podcast-xml/giant-bombcast/",
-        "Kinda Funny Games": "https://kindafunnygames.libsyn.com/rss"
+        "Giant Bombcast": "https://www.giantbomb.com/podcast-xml/giant-bombcast/"
     },
     "✈️ Travel": {
         "Nomadic Matt": "https://www.nomadicmatt.com/travel-blog/feed/",
         "The Blonde Abroad": "https://theblondeabroad.com/feed/",
-        "Expert Vagabond": "https://expertvagabond.com/feed/",
         "Adventurous Kate": "https://www.adventurouskate.com/feed/",
         "One Mile at a Time": "https://onemileatatime.com/feed/",
         "The Points Guy": "https://thepointsguy.com/feed/",
-        "Lonely Planet": "https://www.lonelyplanet.com/news/feed/",
-        "Travel + Leisure": "https://www.travelandleisure.com/feeds/",
         "Conde Nast Traveler": "https://www.cntraveler.com/feed/rss",
-        "National Geographic Travel": "https://www.nationalgeographic.com/travel/feed/",
-        "Afar": "https://www.afar.com/feed",
-        "Budget Travel": "https://www.budgettravel.com/feed",
         "Frommer's": "https://www.frommers.com/feed",
-        "Rick Steves": "https://www.ricksteves.com/feed",
         "View from the Wing": "https://viewfromthewing.com/feed/",
         "Thrifty Traveler": "https://thriftytraveler.com/feed/",
-        "Scott's Cheap Flights": "https://scottscheapflights.com/feed/",
         "The Luxury Travel Expert": "https://theluxurytravelexpert.com/feed/",
-        "Luxury Travel Diary": "https://www.luxurytraveldiary.com/feed/",
         "A Luxury Travel Blog": "https://www.aluxurytravelblog.com/feed/",
-        "God Save the Points": "https://godsavethepoints.com/feed/",
         "Outside Magazine": "https://www.outsideonline.com/feed",
         "Adventure Journal": "https://adventure-journal.com/feed/",
-        "The Adventure Blog": "https://www.theadventureblog.com/feeds/posts/default",
         "Backpacker Magazine": "https://www.backpacker.com/feed",
         "Atlas Obscura": "https://www.atlasobscura.com/feeds/latest",
         "Roads & Kingdoms": "https://roadsandkingdoms.com/feed/",
         "Matador Network": "https://matadornetwork.com/feed/",
-        "The Culture Trip": "https://theculturetrip.com/feed/",
         "Family Travel Forum": "https://myfamilytravels.com/feed",
         "Travel with Kids": "https://www.travelwithkids.com.au/feed/",
         "Ciao Bambino": "https://ciaobambino.com/feed/",
@@ -155,9 +128,7 @@ RSS_FEEDS = {
     },
     "💡 Lifestyle": {
         "Cup of Jo": "https://cupofjo.com/feed/",
-        "Design*Sponge": "https://www.designsponge.com/feed",
         "A Beautiful Mess": "https://abeautifulmess.com/feed/",
-        "The Everygirl": "https://theeverygirl.com/feed/",
         "Wit & Delight": "https://witanddelight.com/feed/",
         "Camille Styles": "https://camillestyles.com/feed/",
         "The Chriselle Factor": "https://thechrisellefactor.com/feed/",
@@ -165,23 +136,12 @@ RSS_FEEDS = {
         "Apartment Therapy": "https://www.apartmenttherapy.com/main.rss",
         "Design Milk": "https://design-milk.com/feed/",
         "Dezeen": "https://www.dezeen.com/feed/",
-        "Dwell": "https://www.dwell.com/rss",
         "Architectural Digest": "https://www.architecturaldigest.com/feed/rss",
-        "Better Homes & Gardens": "https://www.bhg.com/feeds/",
-        "House Beautiful": "https://www.housebeautiful.com/rss/",
-        "Elle Decor": "https://www.elledecor.com/rss/",
-        "Man Repeller": "https://www.manrepeller.com/feed",
         "Who What Wear": "https://www.whowhatwear.com/rss",
         "The Blonde Salad": "https://www.theblondesalad.com/feed",
-        "Atlantic-Pacific": "https://www.atlantic-pacific.com/feed/",
-        "Song of Style": "https://www.songofstyle.com/feed",
-        "Cupcakes and Cashmere": "https://cupcakesandcashmere.com/feed",
         "Into The Gloss": "https://intothegloss.com/feed/",
-        "Byrdie": "https://www.byrdie.com/feeds/",
         "Allure": "https://www.allure.com/feed/rss",
         "Refinery29": "https://www.refinery29.com/rss.xml",
-        "Well+Good": "https://www.wellandgood.com/feed/",
-        "MindBodyGreen": "https://www.mindbodygreen.com/rss.xml",
         "Goop": "https://goop.com/feed/",
         "Art of Manliness": "https://www.artofmanliness.com/feed/",
         "GQ": "https://www.gq.com/feed/rss",
@@ -206,26 +166,16 @@ RSS_FEEDS = {
     },
     "🏡 Home & Garden": {
         "Gardenista": "https://www.gardenista.com/feed/",
-        "Garden Design": "https://www.gardendesign.com/feed/",
         "Fine Gardening": "https://www.finegardening.com/feed",
-        "The Spruce": "https://www.thespruce.com/feeds/",
-        "Better Homes & Gardens Gardening": "https://www.bhg.com/gardening/feed/",
-        "Garden Gate Magazine": "https://www.gardengatemagazine.com/feed/",
         "Horticulture Magazine": "https://www.hortmag.com/feed",
-        "Proven Winners": "https://www.provenwinners.com/feed",
         "Epic Gardening": "https://www.epicgardening.com/feed/",
         "Garden Betty": "https://www.gardenbetty.com/feed/",
         "Joe Gardener": "https://joegardener.com/feed/",
         "Garden Therapy": "https://gardentherapy.ca/feed/",
-        "A Way to Garden": "https://awaytogarden.com/feed/",
         "The Impatient Gardener": "https://www.theimpatientgardener.com/feed/",
         "You Grow Girl": "http://www.yougrowgirl.com/feed/",
         "Cold Climate Gardening": "https://www.coldclimategardening.com/feed/",
         "Floret Flowers": "https://www.floretflowers.com/feed/",
-        "Sierra Flower Finder": "https://www.sierraflowerfinder.com/feed",
-        "American Meadows": "https://www.americanmeadows.com/blog/feed",
-        "White Flower Farm": "https://www.whiteflowerfarm.com/blog/feed",
-        "Houseplant Journal": "https://www.houseplantjournal.com/home/feed",
         "The Sill": "https://www.thesill.com/blogs/plants-101.atom",
         "Pistils Nursery": "https://pistilsnursery.com/blogs/journal.atom",
         "Urban Jungle Bloggers": "https://www.urbanjunglebloggers.com/feed/",
@@ -257,13 +207,14 @@ RSS_FEEDS = {
 GPT2_MODEL_PATH = "gpt2_model.onnx"
 GPT2_MODEL_URL = "https://huggingface.co/HyunjuJane/gpt2_model.onnx/resolve/main/gpt2_model.onnx"
 GPT2_SESSION = None
+GPT2_TOKENIZER = None
 MODEL_AVAILABLE = False
 
 # Check if model exists, if not download it
 if not os.path.exists(GPT2_MODEL_PATH):
-    print("📥 GPT-2 model not found. Downloading from Hugging Face...")
+    logger.info(f"📥 GPT-2 model not found. Downloading from Hugging Face...")
     try:
-        response = requests.get(GPT2_MODEL_URL, stream=True)
+        response = requests.get(GPT2_MODEL_URL, stream=True, timeout=30)
         response.raise_for_status()
         
         # Get total file size
@@ -280,21 +231,24 @@ if not os.path.exists(GPT2_MODEL_PATH):
                         percent = (downloaded / total_size) * 100
                         print(f"\rDownloading: {percent:.1f}%", end='', flush=True)
         
-        print(f"\n✅ Model downloaded successfully to {GPT2_MODEL_PATH}")
+        logger.info(f"\n✅ Model downloaded successfully to {GPT2_MODEL_PATH}")
     except Exception as e:
-        print(f"❌ Failed to download model: {e}")
-        print(f"Please download manually from: {GPT2_MODEL_URL}")
+        logger.error(f"❌ Failed to download model: {e}")
+        logger.info(f"Please download manually from: {GPT2_MODEL_URL}")
 
-# Load the model
+# Load the model and tokenizer
 if os.path.exists(GPT2_MODEL_PATH):
     try:
-        print("🔄 Loading GPT-2 model...")
+        logger.info(f"🔄 Loading GPT-2 model and tokenizer...")
         GPT2_SESSION = ort.InferenceSession(GPT2_MODEL_PATH)
+        GPT2_TOKENIZER = GPT2Tokenizer.from_pretrained("gpt2")
+        GPT2_TOKENIZER.pad_token = GPT2_TOKENIZER.eos_token
         MODEL_AVAILABLE = True
-        print(f"✅ GPT-2 model loaded successfully from {GPT2_MODEL_PATH}")
+        logger.info(f"✅ GPT-2 model and tokenizer loaded successfully")
     except Exception as e:
-        print(f"⚠️ Failed to load GPT-2 model: {e}")
+        logger.error(f"⚠️ Failed to load GPT-2 model: {e}")
         GPT2_SESSION = None
+        MODEL_AVAILABLE = False
 
 @dataclass
 class Article:
@@ -320,28 +274,19 @@ def save_json(path: str, data):
     with open(path, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=2)
 
-def check_active_feeds(feeds):
-    active_feeds = {}
-    inactive_count = 0
-    for category, items in feeds.items():
-        for name, url in items.items():
-            try:
-                response = requests.head(url, timeout=5)
-                if response.status_code == 200:
-                    active_feeds.setdefault(category, {})[name] = url
-                else:
-                    inactive_count += 1
-            except requests.RequestException:
-                inactive_count += 1
-    print(f"✅ Active feeds: {sum(len(v) for v in active_feeds.values())}")
-    print(f"❌ Inactive feeds: {inactive_count}")
-    return active_feeds
-
 def init_config():
-    active_feeds = check_active_feeds(RSS_FEEDS)
-    cfg = []
+    cfg = load_json(CONFIG_PATH)
+    # Create a dict to track unique URLs and avoid duplicates
     url_to_feed = {}
-    for cat, feeds in active_feeds.items():
+    
+    # First pass: collect existing feeds
+    for f in cfg:
+        if isinstance(f, dict) and "url" in f:
+            url_to_feed[f["url"]] = f
+    
+    updated = False
+    # Second pass: add new feeds from RSS_FEEDS
+    for cat, feeds in RSS_FEEDS.items():
         for name, url in feeds.items():
             if url not in url_to_feed:
                 feed_entry = {
@@ -352,13 +297,18 @@ def init_config():
                     "key": f"{cat}_{name}"
                 }
                 url_to_feed[url] = feed_entry
+                updated = True
+    
+    # Convert back to list, preserving deduplication
     cfg = list(url_to_feed.values())
-    save_json(CONFIG_PATH, cfg)
+    
+    if updated:
+        save_json(CONFIG_PATH, cfg)
     return cfg
 
 def fetch_feed(url, name):
     try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
         r.raise_for_status()
         feed = feedparser.parse(r.content)
         return [
@@ -369,22 +319,36 @@ def fetch_feed(url, name):
                 summary=e.get("summary", "")[:300] + "...",
                 author=e.get("author", ""),
                 feed_name=name
-            ) for e in feed.entries[:5]
+            ) for e in feed.entries[:10]
         ]
-    except:
+    except Exception as e:
+        logger.warning(f"Failed to fetch feed {name} from {url}: {e}")
         return []
 
 def update_history():
     cfg = load_json(CONFIG_PATH)
     history = load_json(HISTORY_PATH)
-    links = set(a["link"] for a in history if isinstance(a, dict) and "link" in a)
+    # Handle both old and new history formats
+    links = set()
+    for a in history:
+        if isinstance(a, dict) and "link" in a:
+            links.add(a["link"])
     
     new = 0
+    # Track processed URLs to avoid duplicates
+    processed_urls = set()
+    
     with ThreadPoolExecutor(max_workers=8) as exe:
-        unique_feeds = {f["url"]: f for f in cfg if isinstance(f, dict) and "url" in f}
-        futures = {exe.submit(fetch_feed, f["url"], f["feed_name"]): f for f in unique_feeds.values()}
+        # Deduplicate feeds by URL
+        unique_feeds = {}
+        for f in cfg:
+            if isinstance(f, dict) and "url" in f and "feed_name" in f:
+                url = f["url"]
+                if url not in unique_feeds:
+                    unique_feeds[url] = f
         
-        for fut in as_completed(futures):
+        fut2 = {exe.submit(fetch_feed, f["url"], f["feed_name"]): f for f in unique_feeds.values()}
+        for fut in as_completed(fut2):
             for art in fut.result():
                 if art.link not in links:
                     history.append(asdict(art))
@@ -399,33 +363,83 @@ def update_history():
 def generate_text(prompt: str) -> str:
     if not prompt:
         return "Please enter a prompt."
-    if not GPT2_SESSION:
+    if not GPT2_SESSION or not GPT2_TOKENIZER:
         return "🤖 AI Chat is currently unavailable. The GPT-2 model needs to be downloaded separately. For now, you can browse RSS feeds and search through articles."
     
-    ids = np.array([ord(c) for c in prompt if ord(c) < 50257], dtype=np.int64).reshape(1, -1)
     try:
-        inp = GPT2_SESSION.get_inputs()[0].name
-        out = GPT2_SESSION.run(None, {inp: ids})
-        return "".join(chr(i) for i in out[0][0] if i < 256)
+        # Tokenize the input prompt
+        inputs = GPT2_TOKENIZER(prompt, return_tensors="np", max_length=512, truncation=True, padding=True)
+        input_ids = inputs["input_ids"].astype(np.int64)
+        attention_mask = inputs["attention_mask"].astype(np.int64)
+        
+        # Create position IDs
+        seq_len = input_ids.shape[1]
+        position_ids = np.arange(seq_len, dtype=np.int64).reshape(1, -1)
+        
+        # For GPT-2 ONNX, we need to check what inputs the model expects
+        input_names = [inp.name for inp in GPT2_SESSION.get_inputs()]
+        
+        # Simple generation approach - just get next token prediction
+        if "input_ids" in input_names:
+            # Prepare inputs based on what the model expects
+            onnx_inputs = {"input_ids": input_ids}
+            
+            if "attention_mask" in input_names:
+                onnx_inputs["attention_mask"] = attention_mask
+            
+            if "position_ids" in input_names:
+                onnx_inputs["position_ids"] = position_ids
+                
+            # Run inference
+            outputs = GPT2_SESSION.run(None, onnx_inputs)
+            
+            # Get logits (usually the first output)
+            logits = outputs[0]
+            
+            # Get the predicted token (argmax of the last position)
+            predicted_token_id = np.argmax(logits[0, -1, :])
+            
+            # Decode the predicted token
+            predicted_text = GPT2_TOKENIZER.decode([predicted_token_id])
+            
+            # For a simple demo, just append one predicted token
+            return f"{prompt}{predicted_text}"
+        else:
+            # Fallback if model has different input structure
+            logger.warning(f"Model expects inputs: {input_names}")
+            return f"I received your message: '{prompt}'. The AI model is configured differently than expected. Please check the RSS feeds for now."
+            
     except Exception as e:
-        return f"Error generating text: {e}"
+        logger.error(f"Error in text generation: {e}")
+        logger.debug(f"Model inputs: {[inp.name for inp in GPT2_SESSION.get_inputs()]}")
+        logger.debug(f"Model outputs: {[out.name for out in GPT2_SESSION.get_outputs()]}")
+        
+        # Fallback to a simple response
+        return f"I understand you're asking about: '{prompt}'. However, I encountered an error. Please try browsing the RSS feeds instead."
 
 def create_feed_display(feed_name: str, feed_url: str, layout: str = "cards"):
+    """Create a display for a single feed showing recent articles"""
     articles = fetch_feed(feed_url, feed_name)
+    
     if not articles:
         return f"<h3>{feed_name}</h3><p><em>Unable to fetch articles or no articles available.</em></p>"
     
+    # Escape HTML characters
     def escape_html(text):
-        return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;')
+        return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\"', '&quot;').replace("'", '&#39;')
     
     html_content = f"<h3 style='margin-bottom: 20px;'>{feed_name}</h3>"
     
     if layout == "cards":
+        # Card layout with grid
         html_content += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;">'
+        
         for article in articles:
             title = escape_html(article.title)
             summary = escape_html(article.summary)
+            # Extract first 150 chars for card preview
             preview = summary[:150] + "..." if len(summary) > 150 else summary
+            
             html_content += f"""
             <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; 
                         background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
@@ -443,11 +457,14 @@ def create_feed_display(feed_name: str, feed_url: str, layout: str = "cards"):
                 <p style='color: #333; font-size: 0.9em; line-height: 1.5; margin: 0;'>{preview}</p>
             </div>
             """
+        
         html_content += '</div>'
     else:
+        # List layout (original)
         for article in articles:
             title = escape_html(article.title)
             summary = escape_html(article.summary)
+            
             html_content += f"""
             <div style='border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px;'>
                 <h4><a href='{article.link}' target='_blank' style='text-decoration: none; color: #1a73e8;'>{title}</a></h4>
@@ -455,10 +472,13 @@ def create_feed_display(feed_name: str, feed_url: str, layout: str = "cards"):
                 <p>{summary}</p>
             </div>
             """
+    
     return html_content
 
 def create_category_tab(category_name: str, feeds: Dict[str, str]):
+    """Create a tab for a category with nested tabs for each feed"""
     with gr.Tab(category_name):
+        # Add layout toggle for the category
         with gr.Row():
             layout_radio = gr.Radio(
                 choices=["cards", "list"],
@@ -466,23 +486,30 @@ def create_category_tab(category_name: str, feeds: Dict[str, str]):
                 label="Layout",
                 scale=1
             )
+        
         with gr.Tabs():
             for feed_name, feed_url in feeds.items():
                 with gr.Tab(feed_name):
+                    # Create refresh button and display for this feed
                     with gr.Row():
                         refresh_btn = gr.Button(f"🔄 Refresh {feed_name}", scale=1)
+                    
                     feed_display = gr.HTML(value=create_feed_display(feed_name, feed_url, "cards"))
                     
+                    # Refresh functionality with closure to capture feed_name and feed_url
                     def make_refresh_fn(name, url):
                         def refresh_feed(layout):
                             return create_feed_display(name, url, layout)
                         return refresh_feed
                     
+                    # Update on refresh button click
                     refresh_btn.click(
                         fn=make_refresh_fn(feed_name, feed_url),
                         inputs=[layout_radio],
                         outputs=feed_display
                     )
+                    
+                    # Update on layout change
                     layout_radio.change(
                         fn=make_refresh_fn(feed_name, feed_url),
                         inputs=[layout_radio],
@@ -508,10 +535,11 @@ def create_app():
         gr.Markdown("# Datanacci RSS Reader with ONNX GPT2")
         
         with gr.Tabs():
-            active_feeds = check_active_feeds(RSS_FEEDS)
-            for category_name, feeds in active_feeds.items():
+            # Create tabs for each RSS category
+            for category_name, feeds in RSS_FEEDS.items():
                 create_category_tab(category_name, feeds)
             
+            # History tab with card view
             with gr.Tab("📊 All History"):
                 with gr.Row():
                     btn = gr.Button("🔄 Fetch All RSS Feeds", scale=1)
@@ -521,17 +549,23 @@ def create_app():
                         label="View",
                         scale=1
                     )
+                
                 status = gr.Markdown()
+                
+                # Card view for history
                 history_cards = gr.HTML(visible=True)
                 history_table = gr.Dataframe(value=pd.DataFrame(load_json(HISTORY_PATH)), interactive=False, visible=False)
                 
                 def update_history_display(layout):
                     history = load_json(HISTORY_PATH)
                     if layout == "cards":
+                        # Create card view for history
                         if not history:
                             cards_html = "<p>No articles in history. Click 'Fetch All RSS Feeds' to get started.</p>"
                         else:
                             cards_html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-top: 20px;">'
+                            
+                            # Show latest 50 articles
                             for article in history[:50]:
                                 if isinstance(article, dict):
                                     title = article.get('title', 'No title').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
@@ -539,6 +573,7 @@ def create_app():
                                     published = article.get('published', 'Unknown')
                                     summary = article.get('summary', '')[:200] + '...'
                                     feed_name = article.get('feed_name', 'Unknown Feed')
+                                    
                                     cards_html += f"""
                                     <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px;
                                                background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
@@ -550,9 +585,11 @@ def create_app():
                                         <p style='color: #555; font-size: 0.9em; line-height: 1.4; margin: 0;'>{summary}</p>
                                     </div>
                                     """
+                            
                             cards_html += '</div>'
                             if len(history) > 50:
                                 cards_html += f'<p style="text-align: center; margin-top: 20px; color: #666;">Showing 50 of {len(history)} articles</p>'
+                        
                         return gr.update(value=cards_html, visible=True), gr.update(visible=False)
                     else:
                         return gr.update(visible=False), gr.update(value=pd.DataFrame(history), visible=True)
@@ -563,6 +600,7 @@ def create_app():
                     cards_update, table_update = update_history_display(history_layout.value)
                     return s, cards_update, table_update
                 
+                # Initial display
                 initial_cards, initial_table = update_history_display("cards")
                 history_cards.value = initial_cards['value']
                 
@@ -573,6 +611,7 @@ def create_app():
                     outputs=[history_cards, history_table]
                 )
             
+            # Chat tab
             with gr.Tab("💬 Chat"):
                 chatbot = gr.Chatbot(type="messages", value=[])
                 txt = gr.Textbox(placeholder="Ask about the articles...")
@@ -580,6 +619,7 @@ def create_app():
                 txt.submit(chat, [chatbot, txt], [chatbot, txt])
                 clr.click(lambda: [], None, chatbot)
             
+            # Config tab
             with gr.Tab("⚙️ Config"):
                 cfg_df = gr.Dataframe(value=pd.DataFrame(init_config()), interactive=True)
                 def save_cfg(df):
@@ -590,4 +630,7 @@ def create_app():
 
 if __name__ == "__main__":
     init_config()
-    create_app().launch()
+    print("\n🚀 Starting Datanacci RSS Reader...")
+    print("📌 The app will open in your browser at http://127.0.0.1:7860")
+    print("📌 Press Ctrl+C to stop the server\n")
+    create_app().launch(server_name="127.0.0.1", server_port=7860, share=False)
