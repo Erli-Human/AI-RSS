@@ -153,9 +153,9 @@ RSS_FEEDS = {
         "Cycling News": "https://www.cyclingnews.com/rss/",
         "Formula 1": "https://www.formula1.com/en/latest/all.xml",
         "NASCAR": "https://www.nascar.com/rss/news/",
-        "MMA Junkie": "https://mmajunkie.usatoday.com/feed",
+        "MMA Junkie": "https://mmajunkie.usatoday.com/feed/",
         "Boxing News": "https://www.boxingnews24.com/feed/",
-        "Pro Wrestling Torch": "https://www.pwtorch.com/feed",
+        "Pro Wrestling Torch": "https://www.pwtorch.com/feed/",
         "Wrestling Observer": "https://www.f4wonline.com/rss.xml"
     },
     "💼 Business": {
@@ -197,7 +197,7 @@ RSS_FEEDS = {
         "Risk Management": "https://www.rmmagazine.com/feed/",
         "Insurance Journal": "https://www.insurancejournal.com/rss/news/",
         "National Underwriter": "https://www.nationalunderwriter.com/rss/news",
-        "Benefits Pro": "https://www.benefitspro.com/feed",
+        "Benefits Pro": "https://www.benefitspro.com/feed/",
         "Employee Benefits": "https://www.employeebenefits.co.uk/rss/news"
     },
     "🎵 Music": {
@@ -205,7 +205,7 @@ RSS_FEEDS = {
         "Complex Music": "https://www.complex.com/feeds/rss/music",
         "Gramophone": "https://www.gramophone.co.uk/rss",
         "Rolling Stone Music": "https://www.rollingstone.com/music/feed/",
-        "NME": "https://www.nme.com/feed",
+        "NME": "https://www.nme.com/feed/",
         "Stereogum": "https://www.stereogum.com/feed/",
         "Consequence of Sound": "https://consequence.net/feed/",
         "Spin": "https://www.spin.com/feed/",
@@ -221,7 +221,7 @@ RSS_FEEDS = {
         "The Source": "https://thesource.com/feed/",
         "Loudwire": "https://loudwire.com/feed/",
         "Metal Injection": "https://metalinjection.net/feed",
-        "Saving Country Music": "https://www.savingcountrymusic.com/feed",
+        "Saving Country Music": "https://www.savingcountrymusic.com/feed/",
         "No Depression": "https://www.nodepression.com/feed/",
         "JazzTimes": "https://jazztimes.com/feed/",
         "Music Business Worldwide": "https://www.musicbusinessworldwide.com/feed/",
