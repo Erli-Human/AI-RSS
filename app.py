@@ -261,7 +261,7 @@ MODEL_AVAILABLE = False
 
 # Check if model exists, if not download it
 if not os.path.exists(GPT2_MODEL_PATH):
-    print(f"📥 GPT-2 model not found. Downloading from Hugging Face...")
+    print("📥 GPT-2 model not found. Downloading from Hugging Face...")
     try:
         response = requests.get(GPT2_MODEL_URL, stream=True)
         response.raise_for_status()
@@ -288,7 +288,7 @@ if not os.path.exists(GPT2_MODEL_PATH):
 # Load the model
 if os.path.exists(GPT2_MODEL_PATH):
     try:
-        print(f"🔄 Loading GPT-2 model...")
+        print("🔄 Loading GPT-2 model...")
         GPT2_SESSION = ort.InferenceSession(GPT2_MODEL_PATH)
         MODEL_AVAILABLE = True
         print(f"✅ GPT-2 model loaded successfully from {GPT2_MODEL_PATH}")
@@ -321,17 +321,8 @@ def save_json(path: str, data):
         json.dump(data, file, indent=2)
 
 def init_config():
-    cfg = load_json(CONFIG_PATH)
-    # Create a dict to track unique URLs and avoid duplicates
+    cfg = []
     url_to_feed = {}
-    
-    # First pass: collect existing feeds
-    for f in cfg:
-        if isinstance(f, dict) and "url" in f:
-            url_to_feed[f["url"]] = f
-    
-    updated = False
-    # Second pass: add new feeds from RSS_FEEDS
     for cat, feeds in RSS_FEEDS.items():
         for name, url in feeds.items():
             if url not in url_to_feed:
@@ -343,13 +334,8 @@ def init_config():
                     "key": f"{cat}_{name}"
                 }
                 url_to_feed[url] = feed_entry
-                updated = True
-    
-    # Convert back to list, preserving deduplication
     cfg = list(url_to_feed.values())
-    
-    if updated:
-        save_json(CONFIG_PATH, cfg)
+    save_json(CONFIG_PATH, cfg)
     return cfg
 
 def fetch_feed(url, name):
@@ -373,27 +359,14 @@ def fetch_feed(url, name):
 def update_history():
     cfg = load_json(CONFIG_PATH)
     history = load_json(HISTORY_PATH)
-    # Handle both old and new history formats
-    links = set()
-    for a in history:
-        if isinstance(a, dict) and "link" in a:
-            links.add(a["link"])
+    links = set(a["link"] for a in history if isinstance(a, dict) and "link" in a)
     
     new = 0
-    # Track processed URLs to avoid duplicates
-    processed_urls = set()
-    
     with ThreadPoolExecutor(max_workers=8) as exe:
-        # Deduplicate feeds by URL
-        unique_feeds = {}
-        for f in cfg:
-            if isinstance(f, dict) and "url" in f and "feed_name" in f:
-                url = f["url"]
-                if url not in unique_feeds:
-                    unique_feeds[url] = f
+        unique_feeds = {f["url"]: f for f in cfg if isinstance(f, dict) and "url" in f}
+        futures = {exe.submit(fetch_feed, f["url"], f["feed_name"]): f for f in unique_feeds.values()}
         
-        fut2 = {exe.submit(fetch_feed, f["url"], f["feed_name"]): f for f in unique_feeds.values()}
-        for fut in as_completed(fut2):
+        for fut in as_completed(futures):
             for art in fut.result():
                 if art.link not in links:
                     history.append(asdict(art))
@@ -420,28 +393,21 @@ def generate_text(prompt: str) -> str:
         return f"Error generating text: {e}"
 
 def create_feed_display(feed_name: str, feed_url: str, layout: str = "cards"):
-    """Create a display for a single feed showing recent articles"""
     articles = fetch_feed(feed_url, feed_name)
-    
     if not articles:
         return f"<h3>{feed_name}</h3><p><em>Unable to fetch articles or no articles available.</em></p>"
     
-    # Escape HTML characters
     def escape_html(text):
-        return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\"', '&quot;').replace("'", '&#39;')
+        return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;')
     
     html_content = f"<h3 style='margin-bottom: 20px;'>{feed_name}</h3>"
     
     if layout == "cards":
-        # Card layout with grid
         html_content += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;">'
-        
         for article in articles:
             title = escape_html(article.title)
             summary = escape_html(article.summary)
-            # Extract first 150 chars for card preview
             preview = summary[:150] + "..." if len(summary) > 150 else summary
-            
             html_content += f"""
             <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; 
                         background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
@@ -459,14 +425,11 @@ def create_feed_display(feed_name: str, feed_url: str, layout: str = "cards"):
                 <p style='color: #333; font-size: 0.9em; line-height: 1.5; margin: 0;'>{preview}</p>
             </div>
             """
-        
         html_content += '</div>'
     else:
-        # List layout (original)
         for article in articles:
             title = escape_html(article.title)
             summary = escape_html(article.summary)
-            
             html_content += f"""
             <div style='border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px;'>
                 <h4><a href='{article.link}' target='_blank' style='text-decoration: none; color: #1a73e8;'>{title}</a></h4>
@@ -474,13 +437,10 @@ def create_feed_display(feed_name: str, feed_url: str, layout: str = "cards"):
                 <p>{summary}</p>
             </div>
             """
-    
     return html_content
 
 def create_category_tab(category_name: str, feeds: Dict[str, str]):
-    """Create a tab for a category with nested tabs for each feed"""
     with gr.Tab(category_name):
-        # Add layout toggle for the category
         with gr.Row():
             layout_radio = gr.Radio(
                 choices=["cards", "list"],
@@ -488,30 +448,23 @@ def create_category_tab(category_name: str, feeds: Dict[str, str]):
                 label="Layout",
                 scale=1
             )
-        
         with gr.Tabs():
             for feed_name, feed_url in feeds.items():
                 with gr.Tab(feed_name):
-                    # Create refresh button and display for this feed
                     with gr.Row():
                         refresh_btn = gr.Button(f"🔄 Refresh {feed_name}", scale=1)
-                    
                     feed_display = gr.HTML(value=create_feed_display(feed_name, feed_url, "cards"))
                     
-                    # Refresh functionality with closure to capture feed_name and feed_url
                     def make_refresh_fn(name, url):
                         def refresh_feed(layout):
                             return create_feed_display(name, url, layout)
                         return refresh_feed
                     
-                    # Update on refresh button click
                     refresh_btn.click(
                         fn=make_refresh_fn(feed_name, feed_url),
                         inputs=[layout_radio],
                         outputs=feed_display
                     )
-                    
-                    # Update on layout change
                     layout_radio.change(
                         fn=make_refresh_fn(feed_name, feed_url),
                         inputs=[layout_radio],
@@ -537,11 +490,9 @@ def create_app():
         gr.Markdown("# Datanacci RSS Reader with ONNX GPT2")
         
         with gr.Tabs():
-            # Create tabs for each RSS category
             for category_name, feeds in RSS_FEEDS.items():
                 create_category_tab(category_name, feeds)
             
-            # History tab with card view
             with gr.Tab("📊 All History"):
                 with gr.Row():
                     btn = gr.Button("🔄 Fetch All RSS Feeds", scale=1)
@@ -551,23 +502,17 @@ def create_app():
                         label="View",
                         scale=1
                     )
-                
                 status = gr.Markdown()
-                
-                # Card view for history
                 history_cards = gr.HTML(visible=True)
                 history_table = gr.Dataframe(value=pd.DataFrame(load_json(HISTORY_PATH)), interactive=False, visible=False)
                 
                 def update_history_display(layout):
                     history = load_json(HISTORY_PATH)
                     if layout == "cards":
-                        # Create card view for history
                         if not history:
                             cards_html = "<p>No articles in history. Click 'Fetch All RSS Feeds' to get started.</p>"
                         else:
                             cards_html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-top: 20px;">'
-                            
-                            # Show latest 50 articles
                             for article in history[:50]:
                                 if isinstance(article, dict):
                                     title = article.get('title', 'No title').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
@@ -575,7 +520,6 @@ def create_app():
                                     published = article.get('published', 'Unknown')
                                     summary = article.get('summary', '')[:200] + '...'
                                     feed_name = article.get('feed_name', 'Unknown Feed')
-                                    
                                     cards_html += f"""
                                     <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px;
                                                background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
@@ -587,11 +531,9 @@ def create_app():
                                         <p style='color: #555; font-size: 0.9em; line-height: 1.4; margin: 0;'>{summary}</p>
                                     </div>
                                     """
-                            
                             cards_html += '</div>'
                             if len(history) > 50:
                                 cards_html += f'<p style="text-align: center; margin-top: 20px; color: #666;">Showing 50 of {len(history)} articles</p>'
-                        
                         return gr.update(value=cards_html, visible=True), gr.update(visible=False)
                     else:
                         return gr.update(visible=False), gr.update(value=pd.DataFrame(history), visible=True)
@@ -602,8 +544,8 @@ def create_app():
                     cards_update, table_update = update_history_display(history_layout.value)
                     return s, cards_update, table_update
                 
-                # Initial display
-                history_cards.value = update_history_display("cards")[0].value
+                initial_cards, initial_table = update_history_display("cards")
+                history_cards.value = initial_cards['value']
                 
                 btn.click(ref, outputs=[status, history_cards, history_table])
                 history_layout.change(
@@ -612,7 +554,6 @@ def create_app():
                     outputs=[history_cards, history_table]
                 )
             
-            # Chat tab
             with gr.Tab("💬 Chat"):
                 chatbot = gr.Chatbot(type="messages", value=[])
                 txt = gr.Textbox(placeholder="Ask about the articles...")
@@ -620,7 +561,6 @@ def create_app():
                 txt.submit(chat, [chatbot, txt], [chatbot, txt])
                 clr.click(lambda: [], None, chatbot)
             
-            # Config tab
             with gr.Tab("⚙️ Config"):
                 cfg_df = gr.Dataframe(value=pd.DataFrame(init_config()), interactive=True)
                 def save_cfg(df):
