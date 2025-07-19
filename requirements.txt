@@ -15,3 +15,4 @@ numpy
 
 # For running the local ONNX models
 onnxruntime
+transformers
