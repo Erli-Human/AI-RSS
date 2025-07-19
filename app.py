@@ -70,7 +70,9 @@ RSS_FEEDS = {
         "GitHub Blog": "https://github.blog/feed/",
         "Stack Overflow Blog": "https://stackoverflow.blog/feed/",
         "Apple Newsroom": "https://www.apple.com/newsroom/rss-feed.rss",
-        "Amazon Science": "https://www.amazon.science/index.rss",
+        "Amazon Science": "https://www.amazon.science/index.rss"
+    },
+    "⚙️ Engineering": {
         "Facebook Engineering": "https://engineering.fb.com/feed/",
         "Netflix Tech Blog": "https://netflixtechblog.com/feed",
         "Airbnb Engineering": "https://medium.com/feed/airbnb-engineering",
