@@ -13,11 +13,11 @@ import onnxruntime as ort
 from transformers import GPT2Tokenizer
 import logging
 
-Configure logging
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(name)
+logger = logging.getLogger(__name__)
 
-Constants
+# Constants
 CONFIG_PATH = "rss_config.json"
 HISTORY_PATH = "article_history.json"
 
@@ -362,7 +362,7 @@ GPT2_SESSION = None
 GPT2_TOKENIZER = None
 MODEL_AVAILABLE = False
 
-Check if model exists, if not download it
+# Check if model exists, if not download it
 if not os.path.exists(GPT2_MODEL_PATH):
     logger.info(f"📥 GPT-2 model not found. Downloading from Hugging Face...")
     try:
@@ -388,7 +388,7 @@ if not os.path.exists(GPT2_MODEL_PATH):
         logger.error(f"❌ Failed to download model: {e}")
         logger.info(f"Please download manually from: {GPT2_MODEL_URL}")
 
-Load the model and tokenizer
+# Load the model and tokenizer
 if os.path.exists(GPT2_MODEL_PATH):
     try:
         logger.info(f"🔄 Loading GPT-2 model and tokenizer...")
@@ -768,7 +768,7 @@ def create_app():
 
     return app
 
-if name == "main":
+if __name__ == "__main__":
     init_config()
     print("\n🚀 Starting Datanacci RSS Reader...")
     print("📌 The app will open in your browser at http://127.0.0.1:7860")
