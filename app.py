@@ -75,7 +75,6 @@ RSS_FEEDS = {
         "Netflix Tech Blog": "https://netflixtechblog.com/feed",
         "Airbnb Engineering": "https://medium.com/feed/airbnb-engineering",
         "Spotify Engineering": "https://engineering.atspotify.com/feed/",
-        "Twitter Engineering": "https://blog.twitter.com/engineering/en_us/blog.rss",
         "LinkedIn Engineering": "https://engineering.linkedin.com/blog.rss",
         "Dropbox Tech Blog": "https://dropbox.tech/feed",
         "Pinterest Engineering": "https://medium.com/feed/@Pinterest_Engineering",
