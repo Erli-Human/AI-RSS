@@ -320,10 +320,28 @@ def save_json(path: str, data):
     with open(path, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=2)
 
+def check_active_feeds(feeds):
+    active_feeds = {}
+    inactive_count = 0
+    for category, items in feeds.items():
+        for name, url in items.items():
+            try:
+                response = requests.head(url, timeout=5)
+                if response.status_code == 200:
+                    active_feeds.setdefault(category, {})[name] = url
+                else:
+                    inactive_count += 1
+            except requests.RequestException:
+                inactive_count += 1
+    print(f"✅ Active feeds: {sum(len(v) for v in active_feeds.values())}")
+    print(f"❌ Inactive feeds: {inactive_count}")
+    return active_feeds
+
 def init_config():
+    active_feeds = check_active_feeds(RSS_FEEDS)
     cfg = []
     url_to_feed = {}
-    for cat, feeds in RSS_FEEDS.items():
+    for cat, feeds in active_feeds.items():
         for name, url in feeds.items():
             if url not in url_to_feed:
                 feed_entry = {
@@ -490,7 +508,8 @@ def create_app():
         gr.Markdown("# Datanacci RSS Reader with ONNX GPT2")
         
         with gr.Tabs():
-            for category_name, feeds in RSS_FEEDS.items():
+            active_feeds = check_active_feeds(RSS_FEEDS)
+            for category_name, feeds in active_feeds.items():
                 create_category_tab(category_name, feeds)
             
             with gr.Tab("📊 All History"):
